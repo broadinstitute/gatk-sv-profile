@@ -1,13 +1,14 @@
 # gatk-sv-profile
 
-`gatk-sv-profile` is a Python command-line package for comparing two GATK-SV VCF callsets.
-It provides a single workflow for validating inputs, optionally preprocessing the two VCFs
-with GATK structural-variant concordance annotations, and generating comparison tables and
-plots across site-level and genotype-level quality-control dimensions.
+`gatk-sv-profile` is a Python command-line package for profiling one GATK-SV VCF callset or
+comparing two. It validates inputs, optionally preprocesses the VCF(s) with GATK structural-variant
+annotations, and generates quality-control tables and plots across site-level and genotype-level
+dimensions.
 
-The package is intended for side-by-side evaluation of two callsets from the same cohort or
-from closely related cohorts where overlap, allele frequency, genotype behavior, and family
-inheritance patterns are useful comparison signals.
+- **Single-callset mode** (`--vcf`): profile one VCF — counts, size signatures, genotype distributions,
+  family inheritance, and more.
+- **Paired-callset mode** (`--vcf-a` / `--vcf-b`): everything above for each callset, plus
+  site-overlap, allele-frequency correlation, and genotype-concordance comparisons between the two.
 
 ## Workflow
 
@@ -19,8 +20,9 @@ validate -> preprocess -> analyze
 ```
 
 - `validate` checks whether a VCF looks like a compatible GATK-SV-style input.
-- `preprocess` runs GATK `SVConcordance`-based annotation on both callsets.
-- `analyze` reads two annotated VCFs and writes module-specific plots and tables.
+- `preprocess` runs GATK `SVRegionOverlap` (and `SVConcordance` in paired mode) to annotate the
+  VCF(s) before analysis.
+- `analyze` reads annotated VCF(s) and writes module-specific plots and tables.
 - `run` executes `preprocess` and `analyze` end to end.
 
 ## Installation
@@ -55,7 +57,7 @@ must be available on `PATH`, or passed explicitly with `--gatk-path`.
 
 ## Input Expectations
 
-The tool expects two structural-variant VCFs with GATK-SV-style symbolic alleles and
+The tool expects one or two structural-variant VCFs with GATK-SV-style symbolic alleles and
 per-sample genotype fields. In practice:
 
 - `SVTYPE` should be present.
@@ -70,28 +72,39 @@ The `validate` command reports structural issues before you run the rest of the 
 ### 1. Validate a VCF
 
 ```bash
-gatk-sv-profile validate --vcf callset_a.vcf.gz
+gatk-sv-profile validate --vcf callset.vcf.gz
 ```
 
 If the file only has fixable issues, you can request a rewritten output VCF:
 
 ```bash
 gatk-sv-profile validate \
-  --vcf callset_a.vcf.gz \
+  --vcf callset.vcf.gz \
   --fix \
-  --out callset_a.fixed.vcf.gz
+  --out callset.fixed.vcf.gz
 ```
 
-Optional repair helpers are available for some cases:
+Optional repair helpers:
 
 - `--ploidy-table` for repairing missing `ECN`
 - `--drop-bnd` to discard all `BND` records during fix mode
 - `--drop-ctx` to discard all `CTX` records during fix mode
 
-### 2. Preprocess Two Callsets
+### 2. Preprocess
 
-`preprocess` runs concordance-style annotation across the requested contigs and produces two
-annotated VCFs for downstream comparison.
+`preprocess` annotates VCF(s) with genomic-context and (in paired mode) concordance information.
+
+**Single callset** — runs `SVRegionOverlap` only:
+
+```bash
+gatk-sv-profile preprocess \
+  --vcf callset.vcf.gz \
+  --reference-dict reference.dict \
+  --contig-list contigs.list \
+  --output-dir profile_out
+```
+
+**Two callsets** — runs `SVConcordance` + `SVRegionOverlap`:
 
 ```bash
 gatk-sv-profile preprocess \
@@ -109,19 +122,30 @@ Useful options:
 - `--seg-dup-track`, `--simple-repeat-track`, `--repeatmasker-track` for extra interval annotations
 - `--gatk-path` and `--java-options` to control the GATK invocation
 
-This command prints the resolved output paths as:
+This command prints the resolved annotated VCF path(s):
 
 ```text
 annotated_a=...
-annotated_b=...
+annotated_b=...   # paired mode only
 ```
 
-### 3. Analyze Annotated VCFs
+### 3. Analyze
+
+**Single callset:**
 
 ```bash
 gatk-sv-profile analyze \
-  --vcf-a compare_out/preprocess/concordance_a.vcf.gz \
-  --vcf-b compare_out/preprocess/concordance_b.vcf.gz \
+  --vcf profile_out/preprocess/annotated_a.vcf.gz \
+  --label MyCallset \
+  --output-dir profile_out
+```
+
+**Two callsets:**
+
+```bash
+gatk-sv-profile analyze \
+  --vcf-a compare_out/preprocess/annotated_a.vcf.gz \
+  --vcf-b compare_out/preprocess/annotated_b.vcf.gz \
   --label-a CallsetA \
   --label-b CallsetB \
   --output-dir compare_out
@@ -146,7 +170,20 @@ modules_ran=...
 modules_skipped=...
 ```
 
-### 4. Run the End-to-End Workflow
+### 4. Run End to End
+
+**Single callset:**
+
+```bash
+gatk-sv-profile run \
+  --vcf callset.vcf.gz \
+  --label MyCallset \
+  --reference-dict reference.dict \
+  --contig-list contigs.list \
+  --output-dir profile_out
+```
+
+**Two callsets:**
 
 ```bash
 gatk-sv-profile run \
@@ -160,48 +197,50 @@ gatk-sv-profile run \
   --ped cohort.ped
 ```
 
-This is the simplest entry point when you want concordance annotation and downstream
-comparison in one command.
+`run` is the simplest entry point when you want preprocessing and analysis in one command.
 
 ## Analysis Modules
 
-By default, `analyze` runs all available modules. You can restrict execution with `--modules`.
+By default, `analyze` runs all available modules. Restrict with `--modules`.
 
-Site-level modules:
+Modules that run in both single and paired mode:
 
-- `binned_counts`
-- `overall_counts`
-- `site_overlap`
-- `allele_freq`
-- `genotype_dist`
-- `genotype_quality`
-- `counts_per_genome`
-- `size_signatures`
-- `upset`
+| Module | Description |
+|---|---|
+| `overall_counts` | SV counts by type, size, evidence, and genomic context |
+| `genotype_dist` | Genotype and Hardy–Weinberg distributions |
+| `genotype_quality` | GQ and per-variant quality summaries |
+| `counts_per_genome` | Per-sample SV burden |
+| `upset` | Algorithm and evidence-type combination membership |
+| `size_signatures` | Size distributions and MEI subtype summaries |
+| `binned_counts` | Cross-tabulated counts by size, AF, type, and context |
+| `family_analysis` | Transmission and de novo rates (requires `--ped`) |
 
-Genotype-level modules:
+Modules that require two callsets (automatically skipped in single-callset mode):
 
-- `genotype_exact_match`
-- `genotype_concordance`
-- `family_analysis`
+| Module | Description |
+|---|---|
+| `site_overlap` | Per-type site-level recall and precision |
+| `allele_freq` | Allele-frequency correlation across matched pairs |
+| `genotype_concordance` | Genotype-level concordance across shared samples |
+| `genotype_exact_match` | Exact genotype-match rates across shared samples |
 
-`family_analysis` requires a PED file via `--ped`. Some genotype-oriented modules may be
-skipped automatically when the inputs do not share samples.
+`family_analysis` requires a PED file via `--ped`. Genotype-oriented modules may be skipped
+automatically when the inputs do not share samples.
 
 ## Output Layout
 
 Outputs are organized into subdirectories under `--output-dir`.
 
-- `preprocess/` contains intermediate and annotated concordance VCFs.
-- Each analysis module writes into its own directory, such as `site_overlap/` or
-  `genotype_quality/`.
-- Many modules write both `tables/` outputs and PNG figures.
-- Some modules also write parquet tables for downstream programmatic reuse.
+- `preprocess/` contains intermediate and annotated VCFs.
+- Each analysis module writes into its own directory, e.g. `site_overlap/` or `genotype_quality/`.
+- Most modules write both `tables/` outputs (`.tsv.gz`) and PNG figures.
+- Some modules also write parquet tables for programmatic reuse.
 
-Typical examples include:
+Examples:
 
-- `site_overlap/tables/overlap_metrics.tsv.gz`
 - `overall_counts/sv_count_by_type.<label>.png`
+- `site_overlap/tables/overlap_metrics.tsv.gz`
 - `allele_freq/tables/af_correlation_stats.tsv.gz`
 - `genotype_quality/tables/gq_summary.<label>.tsv.gz`
 - `family_analysis/tables/inheritance_stats.trios.tsv.gz`
@@ -214,7 +253,7 @@ Run the test suite from the repository root:
 pytest
 ```
 
-The project includes tests for CLI behavior, preprocessing orchestration, validation logic,
+The project includes tests for CLI behaviour, preprocessing orchestration, validation logic,
 and each individual analysis module.
 
 ## Repository Layout
@@ -223,8 +262,7 @@ and each individual analysis module.
 src/gatk_sv_profile/
 tests/
 pyproject.toml
-PLAN.md
+REFACTOR_PLAN.md
 ```
 
-`PLAN.md` contains the implementation plan and design notes. `README.md` is the user-facing
-entry point for installation and usage.
+`REFACTOR_PLAN.md` describes the one-VCF / two-VCF generalization roadmap.
