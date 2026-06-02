@@ -173,6 +173,10 @@ class AlleleFreqModule(AnalysisModule):
     def name(self) -> str:
         return "allele_freq"
 
+    @property
+    def requires_paired_input(self) -> bool:
+        return True
+
     def run(self, data: AggregatedData, config: AnalysisConfig) -> None:
         output_dir = self.output_dir(config)
         tables_dir = output_dir / "tables"

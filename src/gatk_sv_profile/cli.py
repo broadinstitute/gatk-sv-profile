@@ -11,7 +11,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Type
 import pysam
 
 from .aggregate import aggregate
-from .config import AnalysisConfig
+from .config import AnalysisConfig, AnalysisMode
 from .modules import ALL_MODULES, AnalysisModule
 from .preprocess import parse_reference_dict, read_contig_list, run_preprocess
 from .validate import fix_and_render, validate_and_render
@@ -126,6 +126,7 @@ def _build_analysis_config(
         resolved_contigs, resolved_lengths = _infer_common_contigs(vcf_a_path, vcf_b_path)
     resolved_workers = _resolve_num_workers(requested_workers, len(resolved_contigs))
     return AnalysisConfig(
+        mode=AnalysisMode.PAIRED,
         vcf_a_path=vcf_a_path,
         vcf_b_path=vcf_b_path,
         vcf_a_label=label_a,
@@ -144,7 +145,56 @@ def _build_analysis_config(
     )
 
 
+def _build_analysis_config_single(
+    *,
+    vcf_path: Path,
+    output_dir: Path,
+    label: str,
+    module_names: Optional[List[str]],
+    pass_only: bool,
+    context_overlap: float,
+    per_chrom: bool,
+    enable_site_match_table: bool,
+    per_sample_counts_table: bool,
+    ped_file: Optional[Path],
+    requested_workers: Optional[int],
+    contigs: Optional[List[str]] = None,
+    contig_lengths: Optional[Dict[str, int]] = None,
+) -> AnalysisConfig:
+    resolved_contigs = list(contigs) if contigs is not None else None
+    resolved_lengths = dict(contig_lengths) if contig_lengths is not None else None
+    if resolved_contigs is None or resolved_lengths is None:
+        resolved_contigs, resolved_lengths = _read_vcf_contigs(vcf_path)
+    resolved_workers = _resolve_num_workers(requested_workers, len(resolved_contigs))
+    return AnalysisConfig(
+        mode=AnalysisMode.SINGLE,
+        vcf_a_path=vcf_path,
+        vcf_b_path=None,
+        vcf_a_label=label,
+        vcf_b_label="",
+        output_dir=output_dir,
+        contigs=resolved_contigs,
+        contig_lengths=resolved_lengths,
+        n_workers=resolved_workers,
+        modules=module_names,
+        pass_only=pass_only,
+        context_overlap=context_overlap,
+        per_chrom=per_chrom,
+        enable_site_match_table=enable_site_match_table,
+        per_sample_counts_table=per_sample_counts_table,
+        ped_file=ped_file,
+    )
+
+
+def _validate_vcf_pair(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Enforce that --vcf-a requires --vcf-b in paired mode."""
+    if args.vcf is None and getattr(args, "vcf_b", None) is None:
+        parser.error("--vcf-b is required when using --vcf-a")
+
+
 def _skip_reason(module: AnalysisModule, data, config: AnalysisConfig) -> Optional[str]:
+    if module.requires_paired_input and config.mode == AnalysisMode.SINGLE:
+        return "requires two VCFs"
     if module.requires_shared_samples and not data.shared_samples:
         return "no shared samples"
     if module.requires_ped_file and config.ped_file is None:
@@ -155,24 +205,39 @@ def _skip_reason(module: AnalysisModule, data, config: AnalysisConfig) -> Option
 def _run_analysis(config: AnalysisConfig) -> int:
     logger = logging.getLogger(__name__)
     module_types = _resolve_module_types(config.modules)
-    logger.info(
-        "Starting analysis: %s vs %s across %s contig(s) with %s worker(s)",
-        config.vcf_a_label,
-        config.vcf_b_label,
-        len(config.contigs),
-        config.n_workers,
-    )
+    if config.mode == AnalysisMode.SINGLE:
+        logger.info(
+            "Starting analysis: %s across %s contig(s) with %s worker(s)",
+            config.vcf_a_label,
+            len(config.contigs),
+            config.n_workers,
+        )
+    else:
+        logger.info(
+            "Starting analysis: %s vs %s across %s contig(s) with %s worker(s)",
+            config.vcf_a_label,
+            config.vcf_b_label,
+            len(config.contigs),
+            config.n_workers,
+        )
     logger.info("Selected modules: %s", ", ".join(module_type().name for module_type in module_types))
     data = aggregate(config)
-    logger.info(
-        "Aggregation complete: %s sites in %s, %s sites in %s, %s matched pair(s), %s shared sample(s)",
-        len(data.sites_a),
-        data.label_a,
-        len(data.sites_b),
-        data.label_b,
-        len(data.matched_pairs),
-        len(data.shared_samples),
-    )
+    if config.mode == AnalysisMode.PAIRED:
+        logger.info(
+            "Aggregation complete: %s sites in %s, %s sites in %s, %s matched pair(s), %s shared sample(s)",
+            len(data.sites_a),
+            data.label_a,
+            len(data.sites_b),  # type: ignore[arg-type]
+            data.label_b,
+            len(data.matched_pairs),  # type: ignore[arg-type]
+            len(data.shared_samples),
+        )
+    else:
+        logger.info(
+            "Aggregation complete: %s sites in %s",
+            len(data.sites_a),
+            data.label_a,
+        )
 
     ran_modules: List[str] = []
     skipped_modules: List[str] = []
@@ -210,8 +275,11 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.set_defaults(handler=_handle_validate)
 
     preprocess_parser = subparsers.add_parser("preprocess", help="Run SVConcordance + SVRegionOverlap")
-    preprocess_parser.add_argument("--vcf-a", required=True, type=Path)
-    preprocess_parser.add_argument("--vcf-b", required=True, type=Path)
+    preprocess_vcf_group = preprocess_parser.add_mutually_exclusive_group(required=True)
+    preprocess_vcf_group.add_argument("--vcf", type=Path, help="Single VCF (single-callset mode; runs SVRegionOverlap only)")
+    preprocess_vcf_group.add_argument("--vcf-a", type=Path)
+    preprocess_parser.add_argument("--vcf-b", type=Path)
+    preprocess_parser.add_argument("--label", default="VCF", help="Label for single-VCF mode (default: VCF)")
     preprocess_parser.add_argument("--reference-dict", required=True, type=Path)
     preprocess_parser.add_argument("--contig-list", required=True, type=Path)
     preprocess_parser.add_argument("--contig", help="Restrict preprocessing to a single contig from --contig-list")
@@ -230,8 +298,11 @@ def build_parser() -> argparse.ArgumentParser:
     preprocess_parser.set_defaults(handler=_handle_preprocess)
 
     analyze_parser = subparsers.add_parser("analyze", help="Run analysis modules on preprocessed VCFs")
-    analyze_parser.add_argument("--vcf-a", required=True, type=Path)
-    analyze_parser.add_argument("--vcf-b", required=True, type=Path)
+    analyze_vcf_group = analyze_parser.add_mutually_exclusive_group(required=True)
+    analyze_vcf_group.add_argument("--vcf", type=Path, help="Single VCF (single-callset mode)")
+    analyze_vcf_group.add_argument("--vcf-a", type=Path)
+    analyze_parser.add_argument("--vcf-b", type=Path)
+    analyze_parser.add_argument("--label", default="VCF", help="Label for single-VCF mode (default: VCF)")
     analyze_parser.add_argument("--label-a", default="VCF_A")
     analyze_parser.add_argument("--label-b", default="VCF_B")
     analyze_parser.add_argument("--output-dir", required=True, type=Path)
@@ -256,8 +327,11 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.set_defaults(handler=_handle_analyze)
 
     run_parser = subparsers.add_parser("run", help="Run preprocess + analyze end-to-end")
-    run_parser.add_argument("--vcf-a", required=True, type=Path)
-    run_parser.add_argument("--vcf-b", required=True, type=Path)
+    run_vcf_group = run_parser.add_mutually_exclusive_group(required=True)
+    run_vcf_group.add_argument("--vcf", type=Path, help="Single VCF (single-callset mode; runs SVRegionOverlap only)")
+    run_vcf_group.add_argument("--vcf-a", type=Path)
+    run_parser.add_argument("--vcf-b", type=Path)
+    run_parser.add_argument("--label", default="VCF", help="Label for single-VCF mode (default: VCF)")
     run_parser.add_argument("--label-a", default="VCF_A")
     run_parser.add_argument("--label-b", default="VCF_B")
     run_parser.add_argument("--reference-dict", required=True, type=Path)
@@ -310,6 +384,10 @@ def _handle_validate(args: argparse.Namespace) -> int:
 
 def _handle_preprocess(args: argparse.Namespace) -> int:
     _configure_logging()
+    single_mode = args.vcf is not None
+    if not single_mode and args.vcf_b is None:
+        logging.getLogger(__name__).error("--vcf-b is required when using --vcf-a")
+        return 2
     contigs, contig_lengths = _resolve_requested_preprocess_contigs(
         args.contig_list,
         args.reference_dict,
@@ -323,8 +401,10 @@ def _handle_preprocess(args: argparse.Namespace) -> int:
         resolved_workers,
     )
     config = AnalysisConfig(
-        vcf_a_path=args.vcf_a,
-        vcf_b_path=args.vcf_b,
+        mode=AnalysisMode.SINGLE if single_mode else AnalysisMode.PAIRED,
+        vcf_a_path=args.vcf if single_mode else args.vcf_a,
+        vcf_b_path=None if single_mode else args.vcf_b,
+        vcf_a_label=args.label if single_mode else "VCF_A",
         output_dir=args.output_dir,
         reference_dict=args.reference_dict,
         contigs=contigs,
@@ -338,18 +418,19 @@ def _handle_preprocess(args: argparse.Namespace) -> int:
     )
     annotated_a, annotated_b = run_preprocess(config)
     print(f"annotated_a={annotated_a}")
-    print(f"annotated_b={annotated_b}")
+    if annotated_b is not None:
+        print(f"annotated_b={annotated_b}")
     return 0
 
 
 def _handle_analyze(args: argparse.Namespace) -> int:
     _configure_logging()
-    config = _build_analysis_config(
-        vcf_a_path=args.vcf_a,
-        vcf_b_path=args.vcf_b,
+    single_mode = args.vcf is not None
+    if not single_mode and args.vcf_b is None:
+        logging.getLogger(__name__).error("--vcf-b is required when using --vcf-a")
+        return 2
+    common_kwargs = dict(
         output_dir=args.output_dir,
-        label_a=args.label_a,
-        label_b=args.label_b,
         module_names=_parse_module_names(args.modules),
         pass_only=bool(args.pass_only),
         context_overlap=float(args.context_overlap),
@@ -359,11 +440,25 @@ def _handle_analyze(args: argparse.Namespace) -> int:
         ped_file=args.ped_file,
         requested_workers=args.num_workers,
     )
+    if single_mode:
+        config = _build_analysis_config_single(vcf_path=args.vcf, label=args.label, **common_kwargs)
+    else:
+        config = _build_analysis_config(
+            vcf_a_path=args.vcf_a,
+            vcf_b_path=args.vcf_b,
+            label_a=args.label_a,
+            label_b=args.label_b,
+            **common_kwargs,
+        )
     return _run_analysis(config)
 
 
 def _handle_run(args: argparse.Namespace) -> int:
     _configure_logging()
+    single_mode = args.vcf is not None
+    if not single_mode and args.vcf_b is None:
+        logging.getLogger(__name__).error("--vcf-b is required when using --vcf-a")
+        return 2
     contigs = read_contig_list(args.contig_list)
     contig_lengths = parse_reference_dict(args.reference_dict)
     resolved_workers = _resolve_num_workers(args.num_workers, len(contigs))
@@ -373,8 +468,10 @@ def _handle_run(args: argparse.Namespace) -> int:
         resolved_workers,
     )
     preprocess_config = AnalysisConfig(
-        vcf_a_path=args.vcf_a,
-        vcf_b_path=args.vcf_b,
+        mode=AnalysisMode.SINGLE if single_mode else AnalysisMode.PAIRED,
+        vcf_a_path=args.vcf if single_mode else args.vcf_a,
+        vcf_b_path=None if single_mode else args.vcf_b,
+        vcf_a_label=args.label if single_mode else "VCF_A",
         output_dir=args.output_dir,
         reference_dict=args.reference_dict,
         contigs=contigs,
@@ -388,14 +485,11 @@ def _handle_run(args: argparse.Namespace) -> int:
     )
     annotated_a, annotated_b = run_preprocess(preprocess_config)
     print(f"annotated_a={annotated_a}")
-    print(f"annotated_b={annotated_b}")
+    if annotated_b is not None:
+        print(f"annotated_b={annotated_b}")
 
-    analyze_config = _build_analysis_config(
-        vcf_a_path=annotated_a,
-        vcf_b_path=annotated_b,
+    common_kwargs = dict(
         output_dir=args.output_dir,
-        label_a=args.label_a,
-        label_b=args.label_b,
         module_names=_parse_module_names(args.modules),
         pass_only=bool(args.pass_only),
         context_overlap=float(args.context_overlap),
@@ -407,6 +501,18 @@ def _handle_run(args: argparse.Namespace) -> int:
         contigs=contigs,
         contig_lengths=contig_lengths,
     )
+    if single_mode:
+        analyze_config = _build_analysis_config_single(
+            vcf_path=annotated_a, label=args.label, **common_kwargs
+        )
+    else:
+        analyze_config = _build_analysis_config(
+            vcf_a_path=annotated_a,
+            vcf_b_path=annotated_b,  # type: ignore[arg-type]
+            label_a=args.label_a,
+            label_b=args.label_b,
+            **common_kwargs,
+        )
     return _run_analysis(analyze_config)
 
 

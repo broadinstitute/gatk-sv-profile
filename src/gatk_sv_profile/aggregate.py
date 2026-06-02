@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pysam
 
-from .config import AnalysisConfig
+from .config import AnalysisConfig, AnalysisMode
 from .dimensions import categorize_variant, is_filtered_pass
 from .vcf_reader import SiteRecord, iter_contig
 
@@ -49,17 +49,21 @@ class AggregatedData:
     """Lightweight analysis context returned by the aggregation stage."""
 
     sites_a: pd.DataFrame
-    sites_b: pd.DataFrame
-    matched_pairs: pd.DataFrame
+    sites_b: Optional[pd.DataFrame]
+    matched_pairs: Optional[pd.DataFrame]
     site_table_dir: Path
     genotype_artifacts_dir: Optional[Path]
     sample_names_a: List[str]
-    sample_names_b: List[str]
+    sample_names_b: Optional[List[str]]
     shared_samples: List[str]
     sample_indices_a: Optional[np.ndarray]
     sample_indices_b: Optional[np.ndarray]
     label_a: str
-    label_b: str
+    label_b: Optional[str]
+
+    @property
+    def is_paired(self) -> bool:
+        return self.sites_b is not None
 
 
 def _empty_site_table() -> pd.DataFrame:
@@ -211,43 +215,62 @@ def build_matched_pairs(sites_a: pd.DataFrame, sites_b: pd.DataFrame) -> pd.Data
     return result[columns].drop_duplicates(subset=["pair_id"]).reset_index(drop=True)
 
 
+def _aggregate_single(
+    vcf_path: Path,
+    label: str,
+    config: AnalysisConfig,
+    aggregate_dir: Path,
+    prefix: str,
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Extract site table and sample names for one VCF."""
+    site_paths = _extract_site_tables(
+        vcf_path,
+        config.contigs,
+        aggregate_dir,
+        prefix,
+        config.n_workers,
+        config.context_overlap,
+    )
+    sites = _read_site_tables(site_paths)
+    if not sites.empty:
+        sites.to_parquet(aggregate_dir / f"{prefix}.all.parquet", index=False)
+    sample_names = _sample_names(vcf_path)
+    return sites, sample_names
+
+
 def aggregate(config: AnalysisConfig) -> AggregatedData:
-    """Parallel aggregation over both VCFs."""
-    if config.vcf_a_path is None or config.vcf_b_path is None:
-        raise ValueError("Both vcf_a_path and vcf_b_path are required for aggregation.")
+    """Aggregate site tables for one or two VCFs based on config.mode."""
+    if config.vcf_a_path is None:
+        raise ValueError("vcf_a_path is required for aggregation.")
     if not config.contigs:
         raise ValueError("At least one contig is required for aggregation.")
 
     aggregate_dir = config.output_dir / "aggregate"
     aggregate_dir.mkdir(parents=True, exist_ok=True)
 
-    sample_names_a = _sample_names(config.vcf_a_path)
-    sample_names_b = _sample_names(config.vcf_b_path)
+    sites_a, sample_names_a = _aggregate_single(config.vcf_a_path, config.vcf_a_label, config, aggregate_dir, "sites_a")
+
+    if config.mode == AnalysisMode.SINGLE:
+        return AggregatedData(
+            sites_a=sites_a,
+            sites_b=None,
+            matched_pairs=None,
+            site_table_dir=aggregate_dir,
+            genotype_artifacts_dir=None,
+            sample_names_a=sample_names_a,
+            sample_names_b=None,
+            shared_samples=[],
+            sample_indices_a=None,
+            sample_indices_b=None,
+            label_a=config.vcf_a_label,
+            label_b=None,
+        )
+
+    if config.vcf_b_path is None:
+        raise ValueError("vcf_b_path is required for PAIRED mode aggregation.")
+
+    sites_b, sample_names_b = _aggregate_single(config.vcf_b_path, config.vcf_b_label, config, aggregate_dir, "sites_b")
     shared_samples, sample_indices_a, sample_indices_b = _shared_samples(sample_names_a, sample_names_b)
-
-    site_paths_a = _extract_site_tables(
-        config.vcf_a_path,
-        config.contigs,
-        aggregate_dir,
-        "sites_a",
-        config.n_workers,
-        config.context_overlap,
-    )
-    site_paths_b = _extract_site_tables(
-        config.vcf_b_path,
-        config.contigs,
-        aggregate_dir,
-        "sites_b",
-        config.n_workers,
-        config.context_overlap,
-    )
-
-    sites_a = _read_site_tables(site_paths_a)
-    sites_b = _read_site_tables(site_paths_b)
-    if not sites_a.empty:
-        sites_a.to_parquet(aggregate_dir / "sites_a.all.parquet", index=False)
-    if not sites_b.empty:
-        sites_b.to_parquet(aggregate_dir / "sites_b.all.parquet", index=False)
 
     matched_pairs = build_matched_pairs(sites_a, sites_b)
     matched_pairs.to_parquet(aggregate_dir / "matched_pairs.parquet", index=False)

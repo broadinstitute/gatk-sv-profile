@@ -22,6 +22,10 @@ class AnalysisModule(ABC):
         """Directory name for outputs."""
 
     @property
+    def requires_paired_input(self) -> bool:
+        return False
+
+    @property
     def requires_shared_samples(self) -> bool:
         return False
 

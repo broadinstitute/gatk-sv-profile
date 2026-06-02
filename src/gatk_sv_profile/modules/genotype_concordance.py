@@ -237,6 +237,10 @@ class GenotypeConcordanceModule(AnalysisModule):
         return "genotype_concordance"
 
     @property
+    def requires_paired_input(self) -> bool:
+        return True
+
+    @property
     def requires_shared_samples(self) -> bool:
         return True
 

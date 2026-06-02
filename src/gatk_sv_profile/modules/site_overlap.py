@@ -155,6 +155,10 @@ class SiteOverlapModule(AnalysisModule):
         return "site_overlap"
 
     @property
+    def requires_paired_input(self) -> bool:
+        return True
+
+    @property
     def requires_concordance(self) -> bool:
         return True
 

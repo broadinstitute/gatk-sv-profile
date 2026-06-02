@@ -12,7 +12,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pysam
 
-from .config import AnalysisConfig
+from .config import AnalysisConfig, AnalysisMode
 from .dimensions import STATUS_MATCHED, STATUS_UNMATCHED
 from .vcf_format import resolve_record_svtype
 
@@ -519,14 +519,96 @@ def _scatter_region_overlap(
     return results
 
 
-def run_preprocess(config: AnalysisConfig) -> Tuple[Path, Path]:
-    """Run the Phase 2 preprocess workflow and return annotated VCF paths."""
-    if config.vcf_a_path is None or config.vcf_b_path is None:
-        raise PreprocessError("Both vcf_a_path and vcf_b_path are required for preprocessing.")
+def _scatter_vcf_by_contig(vcf_path: Path, contigs: Sequence[str], output_dir: Path) -> List[Path]:
+    """Split a VCF into per-contig shards for parallel processing."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shard_paths: List[Path] = []
+    with pysam.VariantFile(str(vcf_path)) as in_vcf:
+        header = in_vcf.header.copy()
+        for contig in contigs:
+            shard_path = output_dir / f"{contig}.vcf.gz"
+            with pysam.VariantFile(str(shard_path), "wz", header=header) as out_vcf:
+                for record in _iter_records_for_contig(in_vcf, contig):
+                    out_vcf.write(record)
+            pysam.tabix_index(str(shard_path), preset="vcf", force=True)
+            shard_paths.append(shard_path)
+    return shard_paths
+
+
+def _passthrough_str_vcf(str_vcf: Path, output_path: Path) -> Path:
+    """Copy a STR VCF without cross-callset annotation (single-VCF mode)."""
+    with pysam.VariantFile(str(str_vcf)) as in_vcf:
+        header = in_vcf.header.copy()
+        _ensure_str_passthrough_headers(header)
+        with pysam.VariantFile(str(output_path), "wz", header=header) as out_vcf:
+            for record in in_vcf:
+                out_vcf.write(record)
+    pysam.tabix_index(str(output_path), preset="vcf", force=True)
+    return output_path
+
+
+def _run_preprocess_single(config: AnalysisConfig) -> Path:
+    """Run SVRegionOverlap only on a single VCF (no SVConcordance)."""
+    preprocess_dir = config.output_dir / "preprocess"
+    preprocess_dir.mkdir(parents=True, exist_ok=True)
+    assert config.vcf_a_path is not None
+    assert config.reference_dict is not None
+
+    logger.info("Single-VCF preprocess (SVRegionOverlap only): %s", config.vcf_a_path)
+
+    tracks = get_tracks(config)
+    if tracks:
+        logger.info("Region-overlap tracks enabled: %s", ", ".join(tracks.keys()))
+    else:
+        logger.info("No region-overlap tracks configured; SV VCF will be used as-is")
+
+    split_a = _split_str_sv_vcfs(
+        config.vcf_a_path,
+        preprocess_dir / "input_a.sv.vcf.gz",
+        preprocess_dir / "input_a.str.vcf.gz",
+    )
+    logger.info("Split input: %s SV records and %s STR records", split_a.sv_count, split_a.str_count)
+
+    annotated_sv_a = preprocess_dir / "annotated_a.sv.vcf.gz"
+    if tracks and split_a.sv_count:
+        sv_shards = _scatter_vcf_by_contig(split_a.sv_vcf, config.contigs, preprocess_dir / "scatter_a.per_contig")
+        annotated_shards = _scatter_region_overlap(
+            vcfs=sorted(sv_shards),
+            reference_dict=config.reference_dict,
+            output_dir=preprocess_dir / "annotated_a.per_contig",
+            gatk_path=config.gatk_path,
+            java_options=config.java_options,
+            n_workers=config.n_workers,
+            tracks=tracks,
+        )
+        concatenate_vcfs(sorted(annotated_shards), annotated_sv_a)
+    else:
+        _copy_with_index(split_a.sv_vcf, annotated_sv_a)
+
+    annotated_str_a = preprocess_dir / "annotated_a.str.vcf.gz"
+    _passthrough_str_vcf(split_a.str_vcf, annotated_str_a)
+
+    annotated_a = preprocess_dir / "annotated_a.vcf.gz"
+    _merge_vcfs([annotated_sv_a, annotated_str_a], annotated_a, config.contigs)
+
+    logger.info("Preprocess complete: annotated_a=%s", annotated_a)
+    return annotated_a
+
+
+def run_preprocess(config: AnalysisConfig) -> Tuple[Path, Optional[Path]]:
+    """Run the Phase 2 preprocess workflow and return annotated VCF path(s)."""
+    if config.vcf_a_path is None:
+        raise PreprocessError("vcf_a_path is required for preprocessing.")
     if config.reference_dict is None:
         raise PreprocessError("reference_dict is required for preprocessing.")
     if not config.contigs:
         raise PreprocessError("At least one contig is required for preprocessing.")
+
+    if config.mode == AnalysisMode.SINGLE:
+        return _run_preprocess_single(config), None
+
+    if config.vcf_b_path is None:
+        raise PreprocessError("vcf_b_path is required for PAIRED mode preprocessing.")
 
     preprocess_dir = config.output_dir / "preprocess"
     preprocess_dir.mkdir(parents=True, exist_ok=True)

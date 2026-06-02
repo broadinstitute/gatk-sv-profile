@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from pathlib import Path
 from typing import Dict, List, Optional
+
+
+class AnalysisMode(Enum):
+    SINGLE = auto()
+    PAIRED = auto()
 
 
 @dataclass
 class AnalysisConfig:
     """Top-level runtime configuration for CLI commands."""
 
+    mode: AnalysisMode = AnalysisMode.PAIRED
     vcf_a_path: Optional[Path] = None
     vcf_b_path: Optional[Path] = None
     vcf_a_label: str = "VCF_A"
