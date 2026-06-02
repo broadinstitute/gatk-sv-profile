@@ -96,7 +96,10 @@ class SizeSignaturesModule(AnalysisModule):
     def run(self, data: AggregatedData, config: AnalysisConfig) -> None:
         output_dir = self.output_dir(config)
 
-        for label, sites in ((data.label_a, data.sites_a), (data.label_b, data.sites_b)):
+        callsets = [(data.label_a, data.sites_a)]
+        if data.sites_b is not None:
+            callsets.append((data.label_b, data.sites_b))
+        for label, sites in callsets:
             filtered = sites.loc[sites["in_filtered_pass_view"]] if config.pass_only else sites
             implausible = flag_implausible_variants(filtered, config.contig_lengths)
             write_tsv_gz(implausible, output_dir / f"implausible_variants.{label}.tsv")

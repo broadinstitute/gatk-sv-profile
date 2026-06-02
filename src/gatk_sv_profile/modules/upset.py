@@ -260,7 +260,10 @@ class UpSetModule(AnalysisModule):
         output_dir = self.output_dir(config)
         tables_dir = output_dir / "tables"
         tables_dir.mkdir(parents=True, exist_ok=True)
-        for label, sites in ((data.label_a, data.sites_a), (data.label_b, data.sites_b)):
+        callsets = [(data.label_a, data.sites_a)]
+        if data.sites_b is not None:
+            callsets.append((data.label_b, data.sites_b))
+        for label, sites in callsets:
             for field in _MEMBERSHIP_FIELDS:
                 table = build_membership_count_table(sites, field.name, pass_only=config.pass_only)
                 write_tsv_gz(table, tables_dir / f"{field.name}_combinations.{label}.tsv")

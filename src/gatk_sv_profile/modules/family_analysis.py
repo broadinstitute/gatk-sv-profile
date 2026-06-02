@@ -414,7 +414,10 @@ class FamilyAnalysisModule(AnalysisModule):
     def run(self, data: AggregatedData, config: AnalysisConfig) -> None:
         if config.ped_file is None:
             return
-        trios = parse_ped_file(config.ped_file, set(data.sample_names_a) | set(data.sample_names_b))
+        sample_set = set(data.sample_names_a)
+        if data.sample_names_b is not None:
+            sample_set |= set(data.sample_names_b)
+        trios = parse_ped_file(config.ped_file, sample_set)
         if not trios:
             return
 
@@ -423,8 +426,12 @@ class FamilyAnalysisModule(AnalysisModule):
         tables_dir.mkdir(parents=True, exist_ok=True)
 
         records_a = build_transmission_table(config.vcf_a_path, data.sites_a, data.label_a, trios, pass_only=config.pass_only)
-        records_b = build_transmission_table(config.vcf_b_path, data.sites_b, data.label_b, trios, pass_only=config.pass_only)
-        records = pd.concat([records_a, records_b], ignore_index=True) if not records_a.empty or not records_b.empty else pd.DataFrame()
+        all_records = [records_a] if not records_a.empty else []
+        if data.sites_b is not None and config.vcf_b_path is not None:
+            records_b = build_transmission_table(config.vcf_b_path, data.sites_b, data.label_b, trios, pass_only=config.pass_only)
+            if not records_b.empty:
+                all_records.append(records_b)
+        records = pd.concat(all_records, ignore_index=True) if all_records else pd.DataFrame()
         if records.empty:
             return
 

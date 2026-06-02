@@ -217,7 +217,10 @@ class OverallCountsModule(AnalysisModule):
 
     def run(self, data: AggregatedData, config: AnalysisConfig) -> None:
         output_dir = self.output_dir(config)
-        for label, sites in ((data.label_a, data.sites_a), (data.label_b, data.sites_b)):
+        callsets = [(data.label_a, data.sites_a)]
+        if data.sites_b is not None:
+            callsets.append((data.label_b, data.sites_b))
+        for label, sites in callsets:
             filtered = _filtered_sites(sites, config.pass_only)
             _plot_type_counts(filtered, output_dir / f"sv_count_by_type.{label}.png", label)
             _plot_type_counts(filtered, output_dir / f"sv_count_by_algorithm.{label}.png", label, field="algorithm", xlabel="Algorithm")

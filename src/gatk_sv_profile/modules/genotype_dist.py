@@ -222,8 +222,11 @@ class GenotypeDistModule(AnalysisModule):
         tables_dir = output_dir / "tables"
         tables_dir.mkdir(parents=True, exist_ok=True)
         table_a = self._run_one(data.sites_a, data.label_a, config, output_dir)
-        table_b = self._run_one(data.sites_b, data.label_b, config, output_dir)
         summary_a = summarize_hwe_by_bucket(table_a, data.label_a)
-        summary_b = summarize_hwe_by_bucket(table_b, data.label_b)
-        combined = summary_a.merge(summary_b, on=["svtype", "size_bucket", "af_bucket", "genomic_context", "evidence_bucket", "algorithm"], how="outer")
+        if data.sites_b is not None:
+            table_b = self._run_one(data.sites_b, data.label_b, config, output_dir)
+            summary_b = summarize_hwe_by_bucket(table_b, data.label_b)
+            combined = summary_a.merge(summary_b, on=["svtype", "size_bucket", "af_bucket", "genomic_context", "evidence_bucket", "algorithm"], how="outer")
+        else:
+            combined = summary_a
         write_tsv_gz(combined, tables_dir / "hwe_stats.tsv")
