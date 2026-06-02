@@ -262,7 +262,4 @@ and each individual analysis module.
 src/gatk_sv_profile/
 tests/
 pyproject.toml
-REFACTOR_PLAN.md
 ```
-
-`REFACTOR_PLAN.md` describes the one-VCF / two-VCF generalization roadmap.
