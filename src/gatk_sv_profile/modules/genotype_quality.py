@@ -100,6 +100,24 @@ class GenotypeQualityModule(AnalysisModule):
                 svtypes = ordered_svtypes(frame["svtype"].dropna().unique())
                 values = [frame.loc[frame["svtype"] == svtype, "gq"].to_numpy(dtype=float) for svtype in svtypes]
                 histogram_bins = _gq_histogram_bins(frame["gq"].to_numpy(dtype=float))
+                # The binned counts below are the exact data rendered by the stacked
+                # histogram (one plot per label), so they are serialized once per label
+                # rather than the underlying per-genotype GQ values.
+                histogram_table = pd.concat(
+                    [
+                        pd.DataFrame(
+                            {
+                                "svtype": str(svtype),
+                                "bin_start": histogram_bins[:-1],
+                                "bin_end": histogram_bins[1:],
+                                "count": np.histogram(svtype_values, bins=histogram_bins)[0],
+                            }
+                        )
+                        for svtype, svtype_values in zip(svtypes, values)
+                    ],
+                    ignore_index=True,
+                )
+                write_tsv_gz(histogram_table, tables_dir / f"gq_histogram.overall.{label}.tsv")
                 colors = [SVTYPE_COLORS.get(str(svtype), SUMMARY_COLORS["neutral"]) for svtype in svtypes]
                 ax.hist(
                     values,

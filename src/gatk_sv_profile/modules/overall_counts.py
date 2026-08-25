@@ -12,7 +12,7 @@ from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import explode_algorithm_buckets, ordered_algorithms, ordered_contexts, ordered_evidence_buckets, ordered_svtypes
 from ..plot_utils import MEI_PEAK_COLORS, SUMMARY_COLORS, SVTYPE_COLORS, double_column_figsize, save_figure
-from .base import AnalysisModule
+from .base import AnalysisModule, write_tsv_gz
 
 _SIZE_BIN_EDGES = np.logspace(np.log10(50.0), 7, 101)
 _MEI_PEAK_REGIONS = [(200, 400, MEI_PEAK_COLORS["alu"]), (1500, 3000, MEI_PEAK_COLORS["sva"]), (5000, 7000, MEI_PEAK_COLORS["l1"])]
@@ -217,11 +217,20 @@ class OverallCountsModule(AnalysisModule):
 
     def run(self, data: AggregatedData, config: AnalysisConfig) -> None:
         output_dir = self.output_dir(config)
+        tables_dir = output_dir / "tables"
+        tables_dir.mkdir(parents=True, exist_ok=True)
         callsets = [(data.label_a, data.sites_a)]
         if data.sites_b is not None:
             callsets.append((data.label_b, data.sites_b))
         for label, sites in callsets:
             filtered = _filtered_sites(sites, config.pass_only)
+            # `filtered` is the single per-site dataframe behind every plot in this loop
+            # (type/size/AF/context distributions, plain and grouped by algorithm or
+            # evidence bucket), so it is serialized once per callset rather than once per plot.
+            write_tsv_gz(
+                filtered[["variant_id", "svtype", "algorithms", "evidence_bucket", "genomic_context", "svlen", "af"]],
+                tables_dir / f"site_features.{label}.tsv",
+            )
             _plot_type_counts(filtered, output_dir / f"sv_count_by_type.{label}.png", label)
             _plot_type_counts(filtered, output_dir / f"sv_count_by_algorithm.{label}.png", label, field="algorithm", xlabel="Algorithm")
             _plot_type_counts(filtered, output_dir / f"sv_count_by_evidence.{label}.png", label, field="evidence_bucket", xlabel="Evidence")

@@ -172,6 +172,13 @@ class SiteOverlapModule(AnalysisModule):
 
         for label, sites in ((data.label_a, data.sites_a), (data.label_b, data.sites_b)):
             filtered = _filtered_sites(sites, config.pass_only)
+            # `filtered` is the single per-site dataframe behind every bar and heatmap
+            # plot in this loop (5 bars + 8 heatmaps), so it is serialized once per
+            # callset rather than once per plot.
+            write_tsv_gz(
+                filtered[["variant_id", "svtype", "size_bucket", "af_bucket", "genomic_context", "evidence_bucket", "algorithms", "status", "truth_vid"]],
+                tables_dir / f"site_overlap_features.{label}.tsv",
+            )
             _plot_overlap_bar(filtered, "svtype", output_dir / f"overlap.by_class.{label}.png", label)
             _plot_overlap_bar(filtered, "algorithm", output_dir / f"overlap.by_algorithm.{label}.png", label)
             _plot_overlap_bar(filtered, "evidence_bucket", output_dir / f"overlap.by_evidence.{label}.png", label)
