@@ -7,7 +7,7 @@ import pandas as pd
 from ..aggregate import AggregatedData
 from ..config import AnalysisConfig, AnalysisMode
 from ..dimensions import af_bucket_sort_key, algorithm_sort_key, complete_genomic_context_buckets, evidence_bucket_sort_key, explode_algorithm_buckets, genomic_context_sort_key, size_bucket_sort_key, svtype_sort_key
-from .base import AnalysisModule, column_safe_label, write_tsv, matched_site_mask
+from .base import AnalysisModule, column_safe_label, write_tsv_gz, matched_site_mask
 
 
 def _filtered_sites(sites: pd.DataFrame, pass_only: bool) -> pd.DataFrame:
@@ -100,5 +100,5 @@ class BinnedCountsModule(AnalysisModule):
                 data.sites_a, data.sites_b, data.label_a, data.label_b,  # type: ignore[arg-type]
                 pass_only=config.pass_only,
             )
-        write_tsv(counts, output_dir / "counts.tsv")
+        write_tsv_gz(counts, output_dir / "counts.tsv")
         counts.to_parquet(output_dir / "counts.parquet", index=False)

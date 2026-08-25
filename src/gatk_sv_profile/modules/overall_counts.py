@@ -12,7 +12,7 @@ from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import explode_algorithm_buckets, ordered_algorithms, ordered_contexts, ordered_evidence_buckets, ordered_svtypes
 from ..plot_utils import MEI_PEAK_COLORS, SUMMARY_COLORS, SVTYPE_COLORS, double_column_figsize, save_figure
-from .base import AnalysisModule, write_tsv
+from .base import AnalysisModule, write_tsv_gz
 
 _SIZE_BIN_EDGES = np.logspace(np.log10(50.0), 7, 101)
 _MEI_PEAK_REGIONS = [(200, 400, MEI_PEAK_COLORS["alu"]), (1500, 3000, MEI_PEAK_COLORS["sva"]), (5000, 7000, MEI_PEAK_COLORS["l1"])]
@@ -227,7 +227,7 @@ class OverallCountsModule(AnalysisModule):
             # `filtered` is the single per-site dataframe behind every plot in this loop
             # (type/size/AF/context distributions, plain and grouped by algorithm or
             # evidence bucket), so it is serialized once per callset rather than once per plot.
-            write_tsv(
+            write_tsv_gz(
                 filtered[["variant_id", "svtype", "algorithms", "evidence_bucket", "genomic_context", "svlen", "af"]],
                 tables_dir / f"site_features.{label}.tsv",
                 skip_gzip=True,

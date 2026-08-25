@@ -14,7 +14,7 @@ from ..config import AnalysisConfig
 from ..dimensions import is_filtered_pass, normalize_svtype, ordered_svtypes
 from ..plot_utils import SUMMARY_COLORS, SVTYPE_COLORS, save_figure, single_column_figsize
 from ..vcf_format import filter_values, safe_info_get
-from .base import AnalysisModule, write_tsv
+from .base import AnalysisModule, write_tsv_gz
 
 
 def _iter_alt_gq_rows(vcf_path: Path, pass_only: bool) -> List[dict]:
@@ -91,7 +91,7 @@ class GenotypeQualityModule(AnalysisModule):
             if vcf_path is None:
                 continue
             summary = summarize_gq(vcf_path, pass_only=config.pass_only)
-            write_tsv(summary, tables_dir / f"gq_summary.{label}.tsv")
+            write_tsv_gz(summary, tables_dir / f"gq_summary.{label}.tsv")
 
             rows = _iter_alt_gq_rows(vcf_path, config.pass_only)
             fig, ax = plt.subplots(figsize=single_column_figsize(2.8))
@@ -117,7 +117,7 @@ class GenotypeQualityModule(AnalysisModule):
                     ],
                     ignore_index=True,
                 )
-                write_tsv(histogram_table, tables_dir / f"gq_histogram.overall.{label}.tsv")
+                write_tsv_gz(histogram_table, tables_dir / f"gq_histogram.overall.{label}.tsv", skip_gzip=True)
                 colors = [SVTYPE_COLORS.get(str(svtype), SUMMARY_COLORS["neutral"]) for svtype in svtypes]
                 ax.hist(
                     values,

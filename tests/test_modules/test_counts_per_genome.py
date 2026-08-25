@@ -23,8 +23,8 @@ def test_counts_per_genome_module_writes_outputs(module_test_context) -> None:
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "counts_per_genome"
-    table_a = pd.read_csv(output_dir / "tables" / "per_sample_counts.CallsetA.tsv", sep="\t")
-    table_b = pd.read_csv(output_dir / "tables" / "per_sample_counts.CallsetB.tsv", sep="\t")
+    table_a = pd.read_csv(output_dir / "tables" / "per_sample_counts.CallsetA.tsv.gz", sep="\t")
+    table_b = pd.read_csv(output_dir / "tables" / "per_sample_counts.CallsetB.tsv.gz", sep="\t")
     assert not table_a.empty
     assert not table_b.empty
     assert (output_dir / "sites_per_genome.by_type.png").exists()
@@ -37,7 +37,7 @@ def test_counts_per_genome_table_disabled_by_default(module_test_context) -> Non
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "counts_per_genome"
-    assert not (output_dir / "tables" / "per_sample_counts.CallsetA.tsv").exists()
+    assert not (output_dir / "tables" / "per_sample_counts.CallsetA.tsv.gz").exists()
 
 
 def test_collect_per_sample_counts_treats_empty_filter_as_pass(make_vcf, tmp_path: Path) -> None:

@@ -10,7 +10,7 @@ from scipy.signal import find_peaks
 
 from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
-from .base import AnalysisModule, write_tsv
+from .base import AnalysisModule, write_tsv_gz
 
 _PEAK_WINDOWS = {
     "alu": (200.0, 400.0),
@@ -102,8 +102,8 @@ class SizeSignaturesModule(AnalysisModule):
         for label, sites in callsets:
             filtered = sites.loc[sites["in_filtered_pass_view"]] if config.pass_only else sites
             implausible = flag_implausible_variants(filtered, config.contig_lengths)
-            write_tsv(implausible, output_dir / f"implausible_variants.{label}.tsv")
+            write_tsv_gz(implausible, output_dir / f"implausible_variants.{label}.tsv")
 
             mei_summary = summarize_mei_subtypes(filtered)
-            write_tsv(mei_summary, output_dir / f"mei_subtype_summary.{label}.tsv")
+            write_tsv_gz(mei_summary, output_dir / f"mei_subtype_summary.{label}.tsv")
 

@@ -24,7 +24,7 @@ def test_binned_counts_module_writes_outputs(module_test_context) -> None:
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "binned_counts"
-    counts = pd.read_csv(output_dir / "counts.tsv", sep="\t")
+    counts = pd.read_csv(output_dir / "counts.tsv.gz", sep="\t")
     assert (output_dir / "counts.parquet").exists()
     assert not counts.empty
     assert {"algorithm", "evidence_bucket", "n_variants_CallsetA", "n_matched_CallsetA", "n_unmatched_CallsetA", "n_variants_CallsetB", "n_matched_CallsetB", "n_unmatched_CallsetB"}.issubset(counts.columns)

@@ -13,7 +13,7 @@ from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import explode_algorithm_buckets, ordered_algorithms, ordered_contexts, ordered_evidence_buckets, ordered_plot_size_buckets, ordered_svtypes
 from ..plot_utils import double_column_figsize, plot_scatter_af, save_figure, single_column_figsize
-from .base import AnalysisModule, relabel_vcf_columns, write_tsv
+from .base import AnalysisModule, relabel_vcf_columns, write_tsv_gz
 
 
 def _compute_correlation_stats(x_values: pd.Series, y_values: pd.Series) -> tuple[float, float, float, float]:
@@ -182,13 +182,13 @@ class AlleleFreqModule(AnalysisModule):
         tables_dir = output_dir / "tables"
         tables_dir.mkdir(parents=True, exist_ok=True)
         stats = build_af_correlation_table(data, pass_only=config.pass_only)
-        write_tsv(stats, tables_dir / "af_correlation_stats.tsv")
+        write_tsv_gz(stats, tables_dir / "af_correlation_stats.tsv")
 
         overall = _matched_pairs_with_categories(data, pass_only=config.pass_only)
         # `overall` is the single per-site dataframe behind every AF scatter plot below
         # (the overall panel and the five grouped-by-{type,size,context,evidence,algorithm}
         # panels), so it is serialized once here rather than once per plot.
-        write_tsv(relabel_vcf_columns(overall, data.label_a, data.label_b), tables_dir / "af_correlation.per_site.tsv", skip_gzip=True)
+        write_tsv_gz(relabel_vcf_columns(overall, data.label_a, data.label_b), tables_dir / "af_correlation.per_site.tsv", skip_gzip=True)
 
         fig, ax = plt.subplots(figsize=single_column_figsize(3.2))
         overall_valid = overall[["af_a", "af_b"]].dropna() if not overall.empty else pd.DataFrame()

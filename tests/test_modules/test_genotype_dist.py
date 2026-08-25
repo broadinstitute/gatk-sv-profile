@@ -37,7 +37,7 @@ def test_genotype_dist_module_writes_outputs(module_test_context) -> None:
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "genotype_dist"
-    table = pd.read_csv(output_dir / "tables" / "hwe_stats.tsv", sep="\t")
+    table = pd.read_csv(output_dir / "tables" / "hwe_stats.tsv.gz", sep="\t")
     assert not table.empty
     assert {"n_variants_CallsetA", "frac_pass_CallsetA", "frac_nominal_CallsetA", "frac_bonferroni_CallsetA", "n_variants_CallsetB", "frac_pass_CallsetB", "frac_nominal_CallsetB", "frac_bonferroni_CallsetB"}.issubset(table.columns)
     assert (output_dir / "ternary.all.CallsetA.png").exists()

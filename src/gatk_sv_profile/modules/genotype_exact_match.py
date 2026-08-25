@@ -13,7 +13,7 @@ import pysam
 from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import complete_genomic_context_buckets, explode_algorithm_buckets
-from .base import AnalysisModule, relabel_vcf_columns, write_tsv
+from .base import AnalysisModule, relabel_vcf_columns, write_tsv_gz
 
 
 _GT_LABELS = {0: "hom_ref", 1: "het", 2: "hom_alt"}
@@ -270,5 +270,5 @@ class GenotypeExactMatchModule(AnalysisModule):
         per_site_output = relabel_vcf_columns(per_site, data.label_a, data.label_b)
         summary_output = relabel_vcf_columns(summary, data.label_a, data.label_b)
         if config.enable_site_match_table:
-            write_tsv(per_site_output, tables_dir / "genotype_match_rates.per_site.tsv")
-        write_tsv(summary_output, tables_dir / "genotype_match_rates.tsv")
+            write_tsv_gz(per_site_output, tables_dir / "genotype_match_rates.per_site.tsv")
+        write_tsv_gz(summary_output, tables_dir / "genotype_match_rates.tsv")

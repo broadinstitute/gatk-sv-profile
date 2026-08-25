@@ -26,10 +26,10 @@ def test_size_signatures_module_writes_outputs(module_test_context) -> None:
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "size_signatures"
-    assert (output_dir / "implausible_variants.CallsetA.tsv").exists()
-    assert (output_dir / "mei_subtype_summary.CallsetB.tsv").exists()
+    assert (output_dir / "implausible_variants.CallsetA.tsv.gz").exists()
+    assert (output_dir / "mei_subtype_summary.CallsetB.tsv.gz").exists()
     assert not (output_dir / "tables").exists()
-    assert not (output_dir / "retrotransposon_peaks.tsv").exists()
-    assert not (output_dir / "size_distribution_comparison.tsv").exists()
+    assert not (output_dir / "retrotransposon_peaks.tsv.gz").exists()
+    assert not (output_dir / "size_distribution_comparison.tsv.gz").exists()
     assert not (output_dir / "retrotransposon_peaks.CallsetA.png").exists()
     assert not (output_dir / "ins_size_overlay.png").exists()
