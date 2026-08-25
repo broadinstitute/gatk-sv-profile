@@ -230,6 +230,7 @@ class OverallCountsModule(AnalysisModule):
             write_tsv_gz(
                 filtered[["variant_id", "svtype", "algorithms", "evidence_bucket", "genomic_context", "svlen", "af"]],
                 tables_dir / f"site_features.{label}.tsv",
+                skip_gzip=True,
             )
             _plot_type_counts(filtered, output_dir / f"sv_count_by_type.{label}.png", label)
             _plot_type_counts(filtered, output_dir / f"sv_count_by_algorithm.{label}.png", label, field="algorithm", xlabel="Algorithm")

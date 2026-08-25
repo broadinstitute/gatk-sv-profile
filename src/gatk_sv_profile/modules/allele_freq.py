@@ -188,7 +188,7 @@ class AlleleFreqModule(AnalysisModule):
         # `overall` is the single per-site dataframe behind every AF scatter plot below
         # (the overall panel and the five grouped-by-{type,size,context,evidence,algorithm}
         # panels), so it is serialized once here rather than once per plot.
-        write_tsv_gz(relabel_vcf_columns(overall, data.label_a, data.label_b), tables_dir / "af_correlation.per_site.tsv")
+        write_tsv_gz(relabel_vcf_columns(overall, data.label_a, data.label_b), tables_dir / "af_correlation.per_site.tsv", skip_gzip=True)
 
         fig, ax = plt.subplots(figsize=single_column_figsize(3.2))
         overall_valid = overall[["af_a", "af_b"]].dropna() if not overall.empty else pd.DataFrame()

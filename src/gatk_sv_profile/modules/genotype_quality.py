@@ -117,7 +117,7 @@ class GenotypeQualityModule(AnalysisModule):
                     ],
                     ignore_index=True,
                 )
-                write_tsv_gz(histogram_table, tables_dir / f"gq_histogram.overall.{label}.tsv")
+                write_tsv_gz(histogram_table, tables_dir / f"gq_histogram.overall.{label}.tsv", skip_gzip=True)
                 colors = [SVTYPE_COLORS.get(str(svtype), SUMMARY_COLORS["neutral"]) for svtype in svtypes]
                 ax.hist(
                     values,

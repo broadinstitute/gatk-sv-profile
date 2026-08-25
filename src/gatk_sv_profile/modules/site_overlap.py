@@ -178,6 +178,7 @@ class SiteOverlapModule(AnalysisModule):
             write_tsv_gz(
                 filtered[["variant_id", "svtype", "size_bucket", "af_bucket", "genomic_context", "evidence_bucket", "algorithms", "status", "truth_vid"]],
                 tables_dir / f"site_overlap_features.{label}.tsv",
+                skip_gzip=True,
             )
             _plot_overlap_bar(filtered, "svtype", output_dir / f"overlap.by_class.{label}.png", label)
             _plot_overlap_bar(filtered, "algorithm", output_dir / f"overlap.by_algorithm.{label}.png", label)

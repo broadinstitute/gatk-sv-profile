@@ -258,7 +258,7 @@ class GenotypeConcordanceModule(AnalysisModule):
         # `metrics` (one row per site/source) is the single dataframe behind every heatmap
         # below (4 metrics x 5 grouping fields = 20 plots), so it is serialized once here
         # rather than once per plot.
-        write_tsv_gz(metrics.replace({"source": {"a": data.label_a, "b": data.label_b}}), tables_dir / "concordance_metrics.per_site.tsv")
+        write_tsv_gz(metrics.replace({"source": {"a": data.label_a, "b": data.label_b}}), tables_dir / "concordance_metrics.per_site.tsv", skip_gzip=True)
         summary = relabel_vcf_columns(summarize_concordance_metrics(metrics), data.label_a, data.label_b)
         write_tsv_gz(summary, tables_dir / "concordance_metrics.tsv")
         for metric in ["genotype_concordance", "non_ref_genotype_concordance", "var_ppv", "var_sensitivity"]:

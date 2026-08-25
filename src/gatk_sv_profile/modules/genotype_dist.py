@@ -236,4 +236,4 @@ class GenotypeDistModule(AnalysisModule):
         # carrier-frequency plot above (the "all" panel plus the six grouped-by-{svtype,
         # algorithm,evidence,af,size,context} panels, per callset), so they are serialized
         # once here (combined across callsets) rather than once per plot.
-        write_tsv_gz(pd.concat(per_site_tables, ignore_index=True), tables_dir / "hwe.per_site.tsv")
+        write_tsv_gz(pd.concat(per_site_tables, ignore_index=True), tables_dir / "hwe.per_site.tsv", skip_gzip=True)
