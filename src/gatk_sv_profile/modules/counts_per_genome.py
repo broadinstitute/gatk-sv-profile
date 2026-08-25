@@ -16,7 +16,7 @@ from ..config import AnalysisConfig
 from ..dimensions import is_filtered_pass, normalize_svtype, ordered_svtypes
 from ..plot_utils import CALLSET_COLORS, double_column_figsize, save_figure
 from ..vcf_format import filter_values, safe_info_get
-from .base import AnalysisModule, write_tsv_gz
+from .base import AnalysisModule, write_tsv
 
 
 def collect_per_sample_counts(vcf_path: Path, pass_only: bool = False) -> pd.DataFrame:
@@ -179,7 +179,7 @@ class CountsPerGenomeModule(AnalysisModule):
             counts = collect_per_sample_counts(vcf_path, pass_only=config.pass_only)
             counts_by_label[label] = counts
             if config.per_sample_counts_table:
-                write_tsv_gz(counts, tables_dir / f"per_sample_counts.{label}.tsv")
+                write_tsv(counts, tables_dir / f"per_sample_counts.{label}.tsv")
 
         counts_a = counts_by_label.get(config.vcf_a_label, pd.DataFrame(columns=["sample", "svtype", "sites", "alleles"]))
         counts_b = counts_by_label.get(config.vcf_b_label, pd.DataFrame(columns=["sample", "svtype", "sites", "alleles"]))

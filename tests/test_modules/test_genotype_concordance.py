@@ -39,7 +39,7 @@ def test_genotype_concordance_module_writes_outputs(module_test_context) -> None
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "genotype_concordance"
-    table = pd.read_csv(output_dir / "tables" / "concordance_metrics.tsv.gz", sep="\t")
+    table = pd.read_csv(output_dir / "tables" / "concordance_metrics.tsv", sep="\t")
     assert not table.empty
     assert (output_dir / "genotype_concordance.af_bucket_x_svtype.png").exists()
     assert (output_dir / "genotype_concordance.size_bucket_x_svtype.png").exists()

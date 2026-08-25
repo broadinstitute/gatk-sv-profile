@@ -12,7 +12,7 @@ from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import af_bucket_sort_key, algorithm_sort_key, complete_genomic_context_buckets, evidence_bucket_sort_key, explode_algorithm_buckets, genomic_context_sort_key, ordered_algorithms, ordered_contexts, ordered_plot_af_buckets, ordered_plot_evidence_buckets, ordered_plot_size_buckets, ordered_svtypes, size_bucket_sort_key, svtype_sort_key
 from ..plot_utils import OVERLAP_COLORS, SUMMARY_COLORS, double_column_figsize, save_figure, plot_heatmap_annotated
-from .base import AnalysisModule, matched_site_mask, relabel_vcf_columns, write_tsv_gz
+from .base import AnalysisModule, matched_site_mask, relabel_vcf_columns, write_tsv
 
 
 def _filtered_sites(sites: pd.DataFrame, pass_only: bool) -> pd.DataFrame:
@@ -167,7 +167,7 @@ class SiteOverlapModule(AnalysisModule):
         tables_dir = output_dir / "tables"
         tables_dir.mkdir(parents=True, exist_ok=True)
         metrics = relabel_vcf_columns(build_overlap_metrics(data.sites_a, data.sites_b, pass_only=config.pass_only), data.label_a, data.label_b)
-        write_tsv_gz(metrics, tables_dir / "overlap_metrics.tsv")
+        write_tsv(metrics, tables_dir / "overlap_metrics.tsv")
         metrics.to_parquet(tables_dir / "overlap_metrics.parquet", index=False)
 
         for label, sites in ((data.label_a, data.sites_a), (data.label_b, data.sites_b)):
@@ -175,7 +175,7 @@ class SiteOverlapModule(AnalysisModule):
             # `filtered` is the single per-site dataframe behind every bar and heatmap
             # plot in this loop (5 bars + 8 heatmaps), so it is serialized once per
             # callset rather than once per plot.
-            write_tsv_gz(
+            write_tsv(
                 filtered[["variant_id", "svtype", "size_bucket", "af_bucket", "genomic_context", "evidence_bucket", "algorithms", "status", "truth_vid"]],
                 tables_dir / f"site_overlap_features.{label}.tsv",
             )
