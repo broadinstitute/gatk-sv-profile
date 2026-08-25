@@ -55,8 +55,11 @@ class AnalysisModule(ABC):
         return directory
 
 
-def write_tsv_gz(dataframe: pd.DataFrame, path: Path) -> Path:
+def write_tsv_gz(dataframe: pd.DataFrame, path: Path, skip_gzip: bool = False) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if skip_gzip:
+        dataframe.to_csv(path, sep="\t", index=False)
+        return path
     resolved = path if str(path).endswith(".gz") else Path(f"{path}.gz")
     dataframe.to_csv(resolved, sep="\t", index=False, compression="gzip")
     return resolved

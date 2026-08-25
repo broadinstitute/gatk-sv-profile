@@ -117,15 +117,32 @@ def normalize_context(genomic_context: Optional[str]) -> str:
     return "none"
 
 
+def _is_none_or_dot_scalar(value: object) -> bool:
+    """Return True only for a scalar None or the literal string ".".
+
+    Safe against array-like inputs (numpy arrays, pandas Series) where a direct
+    ``value in (None, ".")`` comparison would raise "truth value ambiguous".
+    """
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value == "."
+    return False
+
+
+def _is_array_like(value: object) -> bool:
+    return hasattr(value, "__iter__") and not isinstance(value, (str, bytes))
+
+
 def normalize_algorithm(value: object) -> str:
-    normalized = str(value).strip() if value not in (None, ".") else ""
+    normalized = "" if _is_none_or_dot_scalar(value) else str(value).strip()
     return normalized or ALGORITHM_UNKNOWN
 
 
 def normalize_algorithms(value: object) -> tuple[str, ...]:
-    if isinstance(value, (tuple, list, set, frozenset)):
+    if _is_array_like(value):
         raw_values = [normalize_algorithm(item) for item in value]
-    elif value in (None, "."):
+    elif _is_none_or_dot_scalar(value):
         raw_values = [ALGORITHM_UNKNOWN]
     else:
         text = str(value).strip()
@@ -149,9 +166,9 @@ def algorithms_to_text(value: object) -> str:
 
 
 def normalize_evidence_bucket(value: object) -> str:
-    if isinstance(value, (tuple, list, set, frozenset)):
-        raw_values = [str(item).strip().upper() for item in value if item not in (None, ".")]
-    elif value in (None, "."):
+    if _is_array_like(value):
+        raw_values = [str(item).strip().upper() for item in value if not _is_none_or_dot_scalar(item)]
+    elif _is_none_or_dot_scalar(value):
         raw_values = []
     else:
         text = str(value).strip()

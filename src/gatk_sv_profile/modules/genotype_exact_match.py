@@ -129,8 +129,12 @@ def build_exact_match_table(data: AggregatedData, config: AnalysisConfig) -> pd.
     target_ids_a: Dict[str, set[str]] = defaultdict(set)
     target_ids_b: Dict[str, set[str]] = defaultdict(set)
     svtype_by_vid: Dict[str, str] = {}
-    site_meta_a = data.sites_a.set_index("variant_id")[["svtype", "size_bucket", "af_bucket", "genomic_context", "algorithms", "evidence_bucket"]]
-    site_meta_b = data.sites_b.set_index("variant_id")[["svtype", "size_bucket", "af_bucket", "genomic_context", "algorithms", "evidence_bucket"]]
+    site_meta_columns = ["svtype", "size_bucket", "af_bucket", "genomic_context", "algorithms", "evidence_bucket"]
+    # ``drop_duplicates`` guards against inputs where the underlying VCF has duplicate variant IDs;
+    # without it, ``.loc[variant_id]`` below can return a DataFrame and per-row cells become pandas
+    # Series, which later breaks the groupby aggregation with "unhashable type: 'Series'".
+    site_meta_a = data.sites_a.drop_duplicates("variant_id").set_index("variant_id")[site_meta_columns]
+    site_meta_b = data.sites_b.drop_duplicates("variant_id").set_index("variant_id")[site_meta_columns]
     for row in data.matched_pairs.itertuples(index=False):
         target_ids_a[str(row.contig_a)].add(str(row.variant_id_a))
         target_ids_b[str(row.contig_b)].add(str(row.variant_id_b))
