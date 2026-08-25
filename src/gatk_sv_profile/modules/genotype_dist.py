@@ -13,7 +13,7 @@ from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import af_bucket_sort_key, algorithm_sort_key, complete_genomic_context_buckets, evidence_bucket_sort_key, explode_algorithm_buckets, genomic_context_sort_key, ordered_algorithms, ordered_contexts, ordered_plot_af_buckets, ordered_plot_evidence_buckets, ordered_plot_size_buckets, ordered_svtypes, size_bucket_sort_key, svtype_sort_key
 from ..plot_utils import HWE_COLORS, SUMMARY_COLORS, double_column_figsize, plot_scatter_af, plot_ternary, save_figure, single_column_figsize
-from .base import AnalysisModule, column_safe_label, write_tsv_gz
+from .base import AnalysisModule, column_safe_label, write_tsv
 
 
 def _filtered_sites(sites: pd.DataFrame, pass_only: bool) -> pd.DataFrame:
@@ -231,9 +231,9 @@ class GenotypeDistModule(AnalysisModule):
             per_site_tables.append(table_b)
         else:
             combined = summary_a
-        write_tsv_gz(combined, tables_dir / "hwe_stats.tsv")
+        write_tsv(combined, tables_dir / "hwe_stats.tsv")
         # `table_a`/`table_b` are the single per-site dataframes behind every ternary and
         # carrier-frequency plot above (the "all" panel plus the six grouped-by-{svtype,
         # algorithm,evidence,af,size,context} panels, per callset), so they are serialized
         # once here (combined across callsets) rather than once per plot.
-        write_tsv_gz(pd.concat(per_site_tables, ignore_index=True), tables_dir / "hwe.per_site.tsv", skip_gzip=True)
+        write_tsv(pd.concat(per_site_tables, ignore_index=True), tables_dir / "hwe.per_site.tsv")

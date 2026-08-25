@@ -234,16 +234,16 @@ Outputs are organized into subdirectories under `--output-dir`.
 
 - `preprocess/` contains intermediate and annotated VCFs.
 - Each analysis module writes into its own directory, e.g. `site_overlap/` or `genotype_quality/`.
-- Most modules write both `tables/` outputs (`.tsv.gz`) and PNG figures.
+- Most modules write both `tables/` outputs (`.tsv`) and PNG figures.
 - Some modules also write parquet tables for programmatic reuse.
 
 Examples:
 
 - `overall_counts/sv_count_by_type.<label>.png`
-- `site_overlap/tables/overlap_metrics.tsv.gz`
-- `allele_freq/tables/af_correlation_stats.tsv.gz`
-- `genotype_quality/tables/gq_summary.<label>.tsv.gz`
-- `family_analysis/tables/inheritance_stats.trios.tsv.gz`
+- `site_overlap/tables/overlap_metrics.tsv`
+- `allele_freq/tables/af_correlation_stats.tsv`
+- `genotype_quality/tables/gq_summary.<label>.tsv`
+- `family_analysis/tables/inheritance_stats.trios.tsv`
 
 ## Development
 

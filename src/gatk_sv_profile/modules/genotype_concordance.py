@@ -17,7 +17,7 @@ from ..dimensions import af_bucket_sort_key, algorithm_sort_key, complete_genomi
 from ..plot_utils import double_column_figsize, plot_heatmap_annotated, save_figure
 from ..vcf_format import safe_info_get
 from ..vcf_reader import _CONCORDANCE_FIELDS
-from .base import AnalysisModule, relabel_vcf_columns, write_tsv_gz
+from .base import AnalysisModule, relabel_vcf_columns, write_tsv
 
 
 def _record_identifier(record: pysam.VariantRecord) -> str:
@@ -258,9 +258,9 @@ class GenotypeConcordanceModule(AnalysisModule):
         # `metrics` (one row per site/source) is the single dataframe behind every heatmap
         # below (4 metrics x 5 grouping fields = 20 plots), so it is serialized once here
         # rather than once per plot.
-        write_tsv_gz(metrics.replace({"source": {"a": data.label_a, "b": data.label_b}}), tables_dir / "concordance_metrics.per_site.tsv", skip_gzip=True)
+        write_tsv(metrics.replace({"source": {"a": data.label_a, "b": data.label_b}}), tables_dir / "concordance_metrics.per_site.tsv")
         summary = relabel_vcf_columns(summarize_concordance_metrics(metrics), data.label_a, data.label_b)
-        write_tsv_gz(summary, tables_dir / "concordance_metrics.tsv")
+        write_tsv(summary, tables_dir / "concordance_metrics.tsv")
         for metric in ["genotype_concordance", "non_ref_genotype_concordance", "var_ppv", "var_sensitivity"]:
             stem = _metric_stem(metric)
             _plot_metric_heatmap(metrics, metric, "af_bucket", output_dir / f"{stem}.af_bucket_x_svtype.png", data.label_a, data.label_b)

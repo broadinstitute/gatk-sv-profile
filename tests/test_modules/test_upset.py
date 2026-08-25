@@ -31,17 +31,17 @@ def test_upset_module_writes_expected_plots_and_tables(module_test_context) -> N
         output_dir / "algorithms.upset.CallsetB.png",
         output_dir / "evidence.upset.CallsetA.png",
         output_dir / "evidence.upset.CallsetB.png",
-        output_dir / "tables" / "algorithms_combinations.CallsetA.tsv.gz",
-        output_dir / "tables" / "algorithms_combinations.CallsetB.tsv.gz",
-        output_dir / "tables" / "evidence_combinations.CallsetA.tsv.gz",
-        output_dir / "tables" / "evidence_combinations.CallsetB.tsv.gz",
+        output_dir / "tables" / "algorithms_combinations.CallsetA.tsv",
+        output_dir / "tables" / "algorithms_combinations.CallsetB.tsv",
+        output_dir / "tables" / "evidence_combinations.CallsetA.tsv",
+        output_dir / "tables" / "evidence_combinations.CallsetB.tsv",
     ]
 
     for path in expected_files:
         assert path.exists()
 
-    algorithms_table = pd.read_csv(output_dir / "tables" / "algorithms_combinations.CallsetA.tsv.gz", sep="\t")
-    evidence_table = pd.read_csv(output_dir / "tables" / "evidence_combinations.CallsetA.tsv.gz", sep="\t")
+    algorithms_table = pd.read_csv(output_dir / "tables" / "algorithms_combinations.CallsetA.tsv", sep="\t")
+    evidence_table = pd.read_csv(output_dir / "tables" / "evidence_combinations.CallsetA.tsv", sep="\t")
     assert not algorithms_table.empty
     assert not evidence_table.empty
 

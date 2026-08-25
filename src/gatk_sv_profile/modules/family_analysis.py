@@ -15,7 +15,7 @@ from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import explode_algorithm_buckets, ordered_algorithms, ordered_evidence_buckets, ordered_plot_af_buckets, ordered_plot_size_buckets, ordered_svtypes
 from ..plot_utils import SUMMARY_COLORS, SVTYPE_COLORS, double_column_figsize, single_column_figsize, plot_beeswarm_horizontal, plot_heatmap_annotated, save_figure
-from .base import AnalysisModule, write_tsv_gz
+from .base import AnalysisModule, write_tsv
 
 
 @dataclass(frozen=True)
@@ -436,7 +436,7 @@ class FamilyAnalysisModule(AnalysisModule):
             return
 
         inheritance = summarize_inheritance_stats(records)
-        write_tsv_gz(inheritance, tables_dir / "inheritance_stats.trios.tsv")
+        write_tsv(inheritance, tables_dir / "inheritance_stats.trios.tsv")
 
         by_class = summarize_denovo_by_dimension(records, "svtype")
         by_algorithm = summarize_denovo_by_dimension(records, "algorithm")
@@ -446,15 +446,15 @@ class FamilyAnalysisModule(AnalysisModule):
         max_gq = int(records["proband_gq"].fillna(0).max()) if not records.empty else 0
         thresholds = np.unique(np.linspace(0, max(max_gq, 1), num=min(max(max_gq, 1), 10), dtype=int))
         by_gq = summarize_denovo_by_gq(records, thresholds)
-        write_tsv_gz(by_class, tables_dir / "denovo_rate_by_class.tsv")
-        write_tsv_gz(by_algorithm, tables_dir / "denovo_rate_by_algorithm.tsv")
-        write_tsv_gz(by_evidence, tables_dir / "denovo_rate_by_evidence.tsv")
-        write_tsv_gz(by_size, tables_dir / "denovo_rate_by_size.tsv")
-        write_tsv_gz(by_freq, tables_dir / "denovo_rate_by_freq.tsv")
-        write_tsv_gz(by_gq, tables_dir / "denovo_rate_by_gq.tsv")
+        write_tsv(by_class, tables_dir / "denovo_rate_by_class.tsv")
+        write_tsv(by_algorithm, tables_dir / "denovo_rate_by_algorithm.tsv")
+        write_tsv(by_evidence, tables_dir / "denovo_rate_by_evidence.tsv")
+        write_tsv(by_size, tables_dir / "denovo_rate_by_size.tsv")
+        write_tsv(by_freq, tables_dir / "denovo_rate_by_freq.tsv")
+        write_tsv(by_gq, tables_dir / "denovo_rate_by_gq.tsv")
 
         for svtype, table in summarize_size_x_freq(records).items():
-            write_tsv_gz(table, tables_dir / f"denovo_rate_size_x_freq.{svtype}.tsv")
+            write_tsv(table, tables_dir / f"denovo_rate_size_x_freq.{svtype}.tsv")
 
         for family_type in sorted(records["family_type"].unique()):
             _plot_inheritance_beeswarm(inheritance, family_type, output_dir / f"inheritance.{family_type}.all_sv.png")

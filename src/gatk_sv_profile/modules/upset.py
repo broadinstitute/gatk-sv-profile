@@ -14,7 +14,7 @@ from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
 from ..dimensions import EVIDENCE_COMPONENT_ORDER, normalize_algorithms, normalize_evidence_bucket, ordered_algorithms
 from ..plot_utils import double_column_figsize, save_figure
-from .base import AnalysisModule, write_tsv_gz
+from .base import AnalysisModule, write_tsv
 
 try:
     from upsetplot import UpSet, from_memberships
@@ -266,5 +266,5 @@ class UpSetModule(AnalysisModule):
         for label, sites in callsets:
             for field in _MEMBERSHIP_FIELDS:
                 table = build_membership_count_table(sites, field.name, pass_only=config.pass_only)
-                write_tsv_gz(table, tables_dir / f"{field.name}_combinations.{label}.tsv")
+                write_tsv(table, tables_dir / f"{field.name}_combinations.{label}.tsv")
                 _plot_upset(sites, field, output_dir / f"{field.name}.upset.{label}.png", label, pass_only=config.pass_only)

@@ -31,8 +31,8 @@ def test_genotype_exact_match_module_writes_outputs(module_test_context) -> None
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "genotype_exact_match"
-    per_site = pd.read_csv(output_dir / "tables" / "genotype_match_rates.per_site.tsv.gz", sep="\t")
-    summary = pd.read_csv(output_dir / "tables" / "genotype_match_rates.tsv.gz", sep="\t")
+    per_site = pd.read_csv(output_dir / "tables" / "genotype_match_rates.per_site.tsv", sep="\t")
+    summary = pd.read_csv(output_dir / "tables" / "genotype_match_rates.tsv", sep="\t")
     assert not per_site.empty
     assert not summary.empty
     assert "pair_id" not in per_site.columns
@@ -47,8 +47,8 @@ def test_genotype_exact_match_site_table_disabled_by_default(module_test_context
     module.run(module_test_context.data, module_test_context.config)
 
     output_dir = module_test_context.config.output_dir / "genotype_exact_match"
-    assert not (output_dir / "tables" / "genotype_match_rates.per_site.tsv.gz").exists()
-    assert (output_dir / "tables" / "genotype_match_rates.tsv.gz").exists()
+    assert not (output_dir / "tables" / "genotype_match_rates.per_site.tsv").exists()
+    assert (output_dir / "tables" / "genotype_match_rates.tsv").exists()
 
 
 def test_build_exact_match_table_compares_str_repcn(make_vcf, tmp_path) -> None:
