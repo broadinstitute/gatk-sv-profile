@@ -183,6 +183,7 @@ class AlleleFreqModule(AnalysisModule):
         tables_dir.mkdir(parents=True, exist_ok=True)
         stats = build_af_correlation_table(data, pass_only=config.pass_only)
         write_tsv_gz(stats, tables_dir / "af_correlation_stats.tsv")
+        data.summary_tables[f"{self.name}/af_correlation_stats"] = stats
 
         overall = _matched_pairs_with_categories(data, pass_only=config.pass_only)
         fig, ax = plt.subplots(figsize=single_column_figsize(3.2))

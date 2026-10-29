@@ -255,7 +255,9 @@ class GenotypeConcordanceModule(AnalysisModule):
         metrics_a = _extract_concordance_rows(config.vcf_a_path, data.sites_a, data.label_a, "a")
         metrics_b = _extract_concordance_rows(config.vcf_b_path, data.sites_b, data.label_b, "b")
         metrics = pd.concat([metrics_a, metrics_b], ignore_index=True) if not metrics_a.empty or not metrics_b.empty else pd.DataFrame()
-        summary = relabel_vcf_columns(summarize_concordance_metrics(metrics), data.label_a, data.label_b)
+        fixed_summary = summarize_concordance_metrics(metrics)
+        data.summary_tables[f"{self.name}/concordance_metrics"] = fixed_summary
+        summary = relabel_vcf_columns(fixed_summary, data.label_a, data.label_b)
         write_tsv_gz(summary, tables_dir / "concordance_metrics.tsv")
         for metric in ["genotype_concordance", "non_ref_genotype_concordance", "var_ppv", "var_sensitivity"]:
             stem = _metric_stem(metric)

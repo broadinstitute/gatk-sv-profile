@@ -66,3 +66,23 @@ def test_normalize_and_order_evidence_buckets_ignore_unrecognized_tokens() -> No
     assert normalize_evidence_bucket("BAF,SR") == "SR"
     assert ordered_evidence_buckets(["unknown", "PE,SR", "RD", "RD,PE"]) == ["RD", "RD,PE", "PE,SR", "unknown"]
     assert ordered_plot_evidence_buckets(["unknown", "PE,SR", "RD"]) == ["RD", "PE,SR"]
+
+
+def test_canonical_algorithm_combination_is_order_and_case_independent() -> None:
+    from gatk_sv_profile.dimensions import canonical_algorithm_combination
+
+    assert canonical_algorithm_combination("manta,depth") == "depth,manta"
+    assert canonical_algorithm_combination("Depth,manta,MANTA") == "depth,manta"
+    assert canonical_algorithm_combination(None) == "unknown"
+
+
+def test_explode_algorithm_buckets_combined_mode_keeps_one_row_per_site() -> None:
+    from gatk_sv_profile.dimensions import combined_algorithm_buckets, explode_algorithm_buckets
+
+    frame = pd.DataFrame({"variant_id": ["v1", "v2"], "algorithms": ["manta,depth", "wham"]})
+
+    assert len(explode_algorithm_buckets(frame)) == 3
+    with combined_algorithm_buckets():
+        combined = explode_algorithm_buckets(frame)
+    assert combined["algorithm"].tolist() == ["depth,manta", "wham"]
+    assert len(explode_algorithm_buckets(frame)) == 3

@@ -86,6 +86,16 @@ def build_combined_binned_counts(sites_a: pd.DataFrame, sites_b: pd.DataFrame, l
     ).reset_index(drop=True)
 
 
+def _relabel_count_columns(counts: pd.DataFrame, label_a: str, label_b: str) -> pd.DataFrame:
+    token_a = column_safe_label(label_a)
+    token_b = column_safe_label(label_b)
+    rename_map = {}
+    for column in ("n_variants", "n_matched", "n_unmatched"):
+        rename_map[f"{column}_a"] = f"{column}_{token_a}"
+        rename_map[f"{column}_b"] = f"{column}_{token_b}"
+    return counts.rename(columns=rename_map)
+
+
 class BinnedCountsModule(AnalysisModule):
     @property
     def name(self) -> str:
@@ -95,10 +105,13 @@ class BinnedCountsModule(AnalysisModule):
         output_dir = self.output_dir(config)
         if config.mode == AnalysisMode.SINGLE:
             counts = summarize_binned_counts(data.sites_a, pass_only=config.pass_only)
+            data.summary_tables[f"{self.name}/counts"] = counts
         else:
-            counts = build_combined_binned_counts(
-                data.sites_a, data.sites_b, data.label_a, data.label_b,  # type: ignore[arg-type]
+            fixed_counts = build_combined_binned_counts(
+                data.sites_a, data.sites_b, "a", "b",  # type: ignore[arg-type]
                 pass_only=config.pass_only,
             )
+            data.summary_tables[f"{self.name}/counts"] = fixed_counts
+            counts = _relabel_count_columns(fixed_counts, data.label_a, data.label_b)
         write_tsv_gz(counts, output_dir / "counts.tsv")
         counts.to_parquet(output_dir / "counts.parquet", index=False)

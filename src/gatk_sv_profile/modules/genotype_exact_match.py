@@ -263,6 +263,7 @@ class GenotypeExactMatchModule(AnalysisModule):
 
         per_site = build_exact_match_table(data, config)
         summary = summarize_exact_match(per_site)
+        data.summary_tables[f"{self.name}/genotype_match_rates"] = summary
         per_site_output = relabel_vcf_columns(per_site, data.label_a, data.label_b)
         summary_output = relabel_vcf_columns(summary, data.label_a, data.label_b)
         if config.enable_site_match_table:

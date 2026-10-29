@@ -10,7 +10,7 @@ import pandas as pd
 
 from ..aggregate import AggregatedData
 from ..config import AnalysisConfig
-from ..dimensions import af_bucket_sort_key, algorithm_sort_key, complete_genomic_context_buckets, evidence_bucket_sort_key, explode_algorithm_buckets, genomic_context_sort_key, ordered_algorithms, ordered_contexts, ordered_plot_af_buckets, ordered_plot_evidence_buckets, ordered_plot_size_buckets, ordered_svtypes, size_bucket_sort_key, svtype_sort_key
+from ..dimensions import af_bucket_sort_key, algorithm_sort_key, canonical_algorithm_combination, complete_genomic_context_buckets, evidence_bucket_sort_key, explode_algorithm_buckets, genomic_context_sort_key, ordered_algorithms, ordered_contexts, ordered_plot_af_buckets, ordered_plot_evidence_buckets, ordered_plot_size_buckets, ordered_svtypes, size_bucket_sort_key, svtype_sort_key
 from ..plot_utils import OVERLAP_COLORS, SUMMARY_COLORS, double_column_figsize, save_figure, plot_heatmap_annotated
 from .base import AnalysisModule, matched_site_mask, relabel_vcf_columns, write_tsv_gz
 
@@ -62,6 +62,63 @@ def build_overlap_metrics(sites_a: pd.DataFrame, sites_b: pd.DataFrame, pass_onl
             )
         ),
     ).reset_index(drop=True)
+
+
+SITE_MATCH_COLUMNS = [
+    "chrom",
+    "pos",
+    "end",
+    "svtype",
+    "svlen",
+    "size_bucket",
+    "vid_a",
+    "vid_b",
+    "status_a",
+    "status_b",
+    "filter_a",
+    "filter_b",
+    "algorithms_a",
+    "algorithms_b",
+]
+
+
+def build_site_match_table(sites_from: pd.DataFrame, sites_to: pd.DataFrame, from_side: str) -> pd.DataFrame:
+    """One row per site in sites_from, linked through its own TRUTH_VID to the site it matched in sites_to.
+
+    from_side is "a" or "b" and decides which suffix the row's own site gets, so the
+    columns are identical in both directions. The partner columns stay empty when unmatched.
+    """
+    to_side = "b" if from_side == "a" else "a"
+    if sites_from.empty:
+        return pd.DataFrame(columns=SITE_MATCH_COLUMNS)
+    own = pd.DataFrame(
+        {
+            "chrom": sites_from["contig"].to_numpy(),
+            "pos": sites_from["pos"].to_numpy(),
+            "end": sites_from["end"].to_numpy(),
+            "svtype": sites_from["svtype"].to_numpy(),
+            "svlen": sites_from["svlen"].to_numpy(),
+            "size_bucket": sites_from["size_bucket"].to_numpy(),
+            f"vid_{from_side}": sites_from["variant_id"].to_numpy(),
+            f"vid_{to_side}": sites_from["truth_vid"].to_numpy(),
+            f"status_{from_side}": sites_from["status"].to_numpy(),
+            f"filter_{from_side}": sites_from["filter"].to_numpy(),
+            f"algorithms_{from_side}": sites_from["algorithms"].map(canonical_algorithm_combination).to_numpy(),
+        }
+    )
+    partner = sites_to[["variant_id", "status", "filter", "algorithms"]].drop_duplicates(subset=["variant_id"])
+    partner = pd.DataFrame(
+        {
+            f"vid_{to_side}": partner["variant_id"].to_numpy(),
+            f"status_{to_side}": partner["status"].to_numpy(),
+            f"filter_{to_side}": partner["filter"].to_numpy(),
+            f"algorithms_{to_side}": partner["algorithms"].map(canonical_algorithm_combination).to_numpy(),
+        }
+    )
+    table = own.merge(partner, on=f"vid_{to_side}", how="left")
+    for column in ("pos", "end", "svlen"):
+        table[column] = pd.to_numeric(table[column], errors="coerce").astype("Int64")
+    return table[SITE_MATCH_COLUMNS]
 
 
 def _plot_overlap_bar(sites: pd.DataFrame, field: str, output_path: Path, title: str) -> None:
@@ -166,9 +223,14 @@ class SiteOverlapModule(AnalysisModule):
         output_dir = self.output_dir(config)
         tables_dir = output_dir / "tables"
         tables_dir.mkdir(parents=True, exist_ok=True)
-        metrics = relabel_vcf_columns(build_overlap_metrics(data.sites_a, data.sites_b, pass_only=config.pass_only), data.label_a, data.label_b)
+        fixed_metrics = build_overlap_metrics(data.sites_a, data.sites_b, pass_only=config.pass_only)
+        data.summary_tables[f"{self.name}/overlap_metrics"] = fixed_metrics
+        metrics = relabel_vcf_columns(fixed_metrics, data.label_a, data.label_b)
         write_tsv_gz(metrics, tables_dir / "overlap_metrics.tsv")
         metrics.to_parquet(tables_dir / "overlap_metrics.parquet", index=False)
+        if config.enable_site_match_table:
+            write_tsv_gz(build_site_match_table(data.sites_a, data.sites_b, "a"), tables_dir / "site_match.a_to_b.tsv")
+            write_tsv_gz(build_site_match_table(data.sites_b, data.sites_a, "b"), tables_dir / "site_match.b_to_a.tsv")
 
         for label, sites in ((data.label_a, data.sites_a), (data.label_b, data.sites_b)):
             filtered = _filtered_sites(sites, config.pass_only)

@@ -32,6 +32,7 @@ class AnalysisConfig:
     context_overlap: float = 0.5
     per_chrom: bool = False
     enable_site_match_table: bool = False
+    dedup_algorithms: bool = False
     per_sample_counts_table: bool = False
     ped_file: Optional[Path] = None
     seg_dup_track: Optional[Path] = None

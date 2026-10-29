@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pysam
+import pytest
 
 from gatk_sv_profile.config import AnalysisConfig
 from gatk_sv_profile.preprocess import (
+    PreprocessError,
     build_svconcordance_command,
     build_svregionoverlap_command,
     parse_reference_dict,
@@ -256,3 +258,65 @@ def test_run_preprocess_bypasses_and_merges_str_records(tmp_path, monkeypatch) -
         assert {"b_del", "b_str"}.issubset(records)
         assert str(records["b_str"].info["STATUS"]) == "MATCHED"
         assert str(records["b_str"].info["TRUTH_VID"]) == "a_str"
+
+
+def test_run_preprocess_passes_clustering_config_and_writes_provenance(tmp_path, monkeypatch) -> None:
+    import json
+
+    calls = []
+
+    def fake_run_command(command, timeout_seconds=3600):
+        del timeout_seconds
+        calls.append(list(command))
+        output_path = Path(command[command.index("-O") + 1])
+        contig = command[command.index("-L") + 1] if "-L" in command else "chr1"
+        _write_bgzipped_vcf(output_path, contig=contig, variant_id=output_path.stem)
+
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("gatk_sv_profile.preprocess.get_gatk_version", lambda _: "The Genome Analysis Toolkit (GATK) v4.6.1.0\n")
+    monkeypatch.setattr("gatk_sv_profile.preprocess.run_command", fake_run_command)
+
+    clustering_config = tmp_path / "clustering.tsv"
+    clustering_config.write_text("NAME\tDEL\n")
+    reference_dict = tmp_path / "ref.dict"
+    reference_dict.write_text("@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\n")
+    _write_bgzipped_vcf(tmp_path / "a.vcf.gz", "chr1", "a_chr1")
+    _write_bgzipped_vcf(tmp_path / "b.vcf.gz", "chr1", "b_chr1")
+    config = AnalysisConfig(
+        vcf_a_path=tmp_path / "a.vcf.gz",
+        vcf_b_path=tmp_path / "b.vcf.gz",
+        output_dir=tmp_path / "out",
+        reference_dict=reference_dict,
+        contigs=["chr1"],
+        contig_lengths={"chr1": 1000},
+        clustering_config=clustering_config,
+    )
+
+    run_preprocess(config)
+
+    concordance_calls = [call for call in calls if "SVConcordance" in call]
+    assert concordance_calls
+    assert all(call[call.index("--clustering-config") + 1] == str(clustering_config) for call in concordance_calls)
+    provenance = json.loads((tmp_path / "out" / "preprocess" / "provenance.json").read_text())
+    assert provenance["gatk_version"] == "4.6.1.0"
+    assert provenance["clustering_config"]["path"] == str(clustering_config.resolve())
+    assert provenance["annotated_a"] == "annotated_a.vcf.gz"
+
+
+def test_run_preprocess_rejects_missing_clustering_config(tmp_path) -> None:
+    config = AnalysisConfig(
+        vcf_a_path=tmp_path / "a.vcf.gz",
+        vcf_b_path=tmp_path / "b.vcf.gz",
+        output_dir=tmp_path / "out",
+        reference_dict=tmp_path / "ref.dict",
+        contigs=["chr1"],
+        clustering_config=tmp_path / "missing.tsv",
+    )
+    with pytest.raises(PreprocessError, match="Clustering config not found"):
+        run_preprocess(config)

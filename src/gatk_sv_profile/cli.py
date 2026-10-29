@@ -12,8 +12,10 @@ import pysam
 
 from .aggregate import aggregate
 from .config import AnalysisConfig, AnalysisMode
+from .dimensions import combined_algorithm_buckets
 from .modules import ALL_MODULES, AnalysisModule
 from .preprocess import parse_reference_dict, read_contig_list, run_preprocess
+from .provenance import write_summary_json
 from .validate import fix_and_render, validate_and_render
 
 
@@ -117,6 +119,7 @@ def _build_analysis_config(
     per_sample_counts_table: bool,
     ped_file: Optional[Path],
     requested_workers: Optional[int],
+    dedup_algorithms: bool = False,
     contigs: Optional[List[str]] = None,
     contig_lengths: Optional[Dict[str, int]] = None,
 ) -> AnalysisConfig:
@@ -140,6 +143,7 @@ def _build_analysis_config(
         context_overlap=context_overlap,
         per_chrom=per_chrom,
         enable_site_match_table=enable_site_match_table,
+        dedup_algorithms=dedup_algorithms,
         per_sample_counts_table=per_sample_counts_table,
         ped_file=ped_file,
     )
@@ -158,6 +162,7 @@ def _build_analysis_config_single(
     per_sample_counts_table: bool,
     ped_file: Optional[Path],
     requested_workers: Optional[int],
+    dedup_algorithms: bool = False,
     contigs: Optional[List[str]] = None,
     contig_lengths: Optional[Dict[str, int]] = None,
 ) -> AnalysisConfig:
@@ -181,6 +186,7 @@ def _build_analysis_config_single(
         context_overlap=context_overlap,
         per_chrom=per_chrom,
         enable_site_match_table=enable_site_match_table,
+        dedup_algorithms=dedup_algorithms,
         per_sample_counts_table=per_sample_counts_table,
         ped_file=ped_file,
     )
@@ -241,23 +247,43 @@ def _run_analysis(config: AnalysisConfig) -> int:
 
     ran_modules: List[str] = []
     skipped_modules: List[str] = []
-    for module_type in module_types:
-        module = module_type()
-        reason = _skip_reason(module, data, config)
-        if reason is not None:
-            logger.info("Skipping module %s: %s", module.name, reason)
-            skipped_modules.append(module.name)
-            continue
-        logger.info("Running module %s", module.name)
-        module.run(data, config)
-        logger.info("Completed module %s", module.name)
-        ran_modules.append(module.name)
+    if config.dedup_algorithms:
+        logger.info("Counting each site once per algorithm combination (--dedup-algorithms)")
+    with combined_algorithm_buckets(config.dedup_algorithms):
+        for module_type in module_types:
+            module = module_type()
+            reason = _skip_reason(module, data, config)
+            if reason is not None:
+                logger.info("Skipping module %s: %s", module.name, reason)
+                skipped_modules.append(module.name)
+                continue
+            logger.info("Running module %s", module.name)
+            module.run(data, config)
+            logger.info("Completed module %s", module.name)
+            ran_modules.append(module.name)
+
+    summary_path = write_summary_json(config, getattr(data, "summary_tables", {}), ran_modules, skipped_modules)
+    logger.info("Wrote %s", summary_path)
 
     print(f"analysis_output_dir={config.output_dir}")
     print(f"modules_ran={','.join(ran_modules)}")
     if skipped_modules:
         print(f"modules_skipped={','.join(skipped_modules)}")
     return 0
+
+
+_CLUSTERING_CONFIG_HELP = (
+    "SVConcordance clustering config (e.g. gatk-sv's production config). "
+    "Without it SVConcordance uses GATK's built-in defaults."
+)
+_SITE_MATCH_TABLE_HELP = (
+    "Also write per-site tables: site_overlap/tables/site_match.{a_to_b,b_to_a}.tsv.gz "
+    "and genotype_exact_match/tables/genotype_match_rates.per_site.tsv.gz"
+)
+_DEDUP_ALGORITHMS_HELP = (
+    "Count each site once, bucketed by its combined caller string (e.g. depth,manta), "
+    "instead of once per caller. Counts are not comparable across the two modes."
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -289,6 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
     preprocess_parser.add_argument("--repeatmasker-track", type=Path)
     preprocess_parser.add_argument("--gatk-path", default="gatk")
     preprocess_parser.add_argument("--java-options", default="-Xmx4g")
+    preprocess_parser.add_argument("--clustering-config", type=Path, help=_CLUSTERING_CONFIG_HELP)
     preprocess_parser.add_argument(
         "--num-workers",
         type=int,
@@ -315,7 +342,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum overlap fraction required to assign span-based genomic contexts (default: 0.5)",
     )
     analyze_parser.add_argument("--per-chrom", action="store_true")
-    analyze_parser.add_argument("--enable-site-match-table", action="store_true")
+    analyze_parser.add_argument("--enable-site-match-table", action="store_true", help=_SITE_MATCH_TABLE_HELP)
+    analyze_parser.add_argument("--dedup-algorithms", action="store_true", help=_DEDUP_ALGORITHMS_HELP)
     analyze_parser.add_argument("--per-sample-counts-table", action="store_true")
     analyze_parser.add_argument("--ped", dest="ped_file", type=Path)
     analyze_parser.add_argument(
@@ -342,6 +370,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--repeatmasker-track", type=Path)
     run_parser.add_argument("--gatk-path", default="gatk")
     run_parser.add_argument("--java-options", default="-Xmx4g")
+    run_parser.add_argument("--clustering-config", type=Path, help=_CLUSTERING_CONFIG_HELP)
     run_parser.add_argument("--modules", help="Comma-separated module list to run")
     run_parser.add_argument("--pass-only", action="store_true")
     run_parser.add_argument(
@@ -351,7 +380,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum overlap fraction required to assign span-based genomic contexts (default: 0.5)",
     )
     run_parser.add_argument("--per-chrom", action="store_true")
-    run_parser.add_argument("--enable-site-match-table", action="store_true")
+    run_parser.add_argument("--enable-site-match-table", action="store_true", help=_SITE_MATCH_TABLE_HELP)
+    run_parser.add_argument("--dedup-algorithms", action="store_true", help=_DEDUP_ALGORITHMS_HELP)
     run_parser.add_argument("--per-sample-counts-table", action="store_true")
     run_parser.add_argument("--ped", dest="ped_file", type=Path)
     run_parser.add_argument(
@@ -413,6 +443,7 @@ def _handle_preprocess(args: argparse.Namespace) -> int:
         seg_dup_track=args.seg_dup_track,
         simple_repeat_track=args.simple_repeat_track,
         repeatmasker_track=args.repeatmasker_track,
+        clustering_config=args.clustering_config,
         gatk_path=args.gatk_path,
         java_options=args.java_options,
     )
@@ -436,6 +467,7 @@ def _handle_analyze(args: argparse.Namespace) -> int:
         context_overlap=float(args.context_overlap),
         per_chrom=bool(args.per_chrom),
         enable_site_match_table=bool(args.enable_site_match_table),
+        dedup_algorithms=bool(args.dedup_algorithms),
         per_sample_counts_table=bool(args.per_sample_counts_table),
         ped_file=args.ped_file,
         requested_workers=args.num_workers,
@@ -480,6 +512,7 @@ def _handle_run(args: argparse.Namespace) -> int:
         seg_dup_track=args.seg_dup_track,
         simple_repeat_track=args.simple_repeat_track,
         repeatmasker_track=args.repeatmasker_track,
+        clustering_config=args.clustering_config,
         gatk_path=args.gatk_path,
         java_options=args.java_options,
     )
@@ -495,6 +528,7 @@ def _handle_run(args: argparse.Namespace) -> int:
         context_overlap=float(args.context_overlap),
         per_chrom=bool(args.per_chrom),
         enable_site_match_table=bool(args.enable_site_match_table),
+        dedup_algorithms=bool(args.dedup_algorithms),
         per_sample_counts_table=bool(args.per_sample_counts_table),
         ped_file=args.ped_file,
         requested_workers=resolved_workers,
