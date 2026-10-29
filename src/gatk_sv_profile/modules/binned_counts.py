@@ -105,7 +105,9 @@ class BinnedCountsModule(AnalysisModule):
         output_dir = self.output_dir(config)
         if config.mode == AnalysisMode.SINGLE:
             counts = summarize_binned_counts(data.sites_a, pass_only=config.pass_only)
-            data.summary_tables[f"{self.name}/counts"] = counts
+            data.summary_tables[f"{self.name}/counts"] = counts.rename(
+                columns={column: f"{column}_a" for column in ("n_variants", "n_matched", "n_unmatched")}
+            )
         else:
             fixed_counts = build_combined_binned_counts(
                 data.sites_a, data.sites_b, "a", "b",  # type: ignore[arg-type]

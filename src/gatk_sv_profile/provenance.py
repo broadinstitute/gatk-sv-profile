@@ -83,6 +83,9 @@ def load_preprocess_provenance(vcf_a_path: Optional[Path], vcf_b_path: Optional[
     except (OSError, ValueError):
         logger.warning("Ignoring unreadable provenance file %s", path)
         return None
+    if not isinstance(payload, dict):
+        logger.warning("Ignoring provenance file %s: expected a JSON object", path)
+        return None
     if payload.get("annotated_a") != vcf_a_path.name:
         return None
     if vcf_b_path is not None and (payload.get("annotated_b") != vcf_b_path.name or vcf_b_path.parent != vcf_a_path.parent):

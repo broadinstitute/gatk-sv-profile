@@ -571,7 +571,10 @@ def _run_preprocess_single(config: AnalysisConfig) -> Path:
     logger.info("Split input: %s SV records and %s STR records", split_a.sv_count, split_a.str_count)
 
     annotated_sv_a = preprocess_dir / "annotated_a.sv.vcf.gz"
+    gatk_version = None
     if tracks and split_a.sv_count:
+        gatk_version = parse_gatk_version(get_gatk_version(config.gatk_path))
+        logger.info("Using GATK: %s", gatk_version)
         sv_shards = _scatter_vcf_by_contig(split_a.sv_vcf, config.contigs, preprocess_dir / "scatter_a.per_contig")
         annotated_shards = _scatter_region_overlap(
             vcfs=sorted(sv_shards),
@@ -591,7 +594,7 @@ def _run_preprocess_single(config: AnalysisConfig) -> Path:
 
     annotated_a = preprocess_dir / "annotated_a.vcf.gz"
     _merge_vcfs([annotated_sv_a, annotated_str_a], annotated_a, config.contigs)
-    write_preprocess_provenance(preprocess_dir, config=config, gatk_version=None, annotated_a=annotated_a, annotated_b=None)
+    write_preprocess_provenance(preprocess_dir, config=config, gatk_version=gatk_version, annotated_a=annotated_a, annotated_b=None)
 
     logger.info("Preprocess complete: annotated_a=%s", annotated_a)
     return annotated_a

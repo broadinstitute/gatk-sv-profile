@@ -5,7 +5,7 @@ from pathlib import Path
 import pysam
 import pytest
 
-from gatk_sv_profile.config import AnalysisConfig
+from gatk_sv_profile.config import AnalysisConfig, AnalysisMode
 from gatk_sv_profile.preprocess import (
     PreprocessError,
     build_svconcordance_command,
@@ -320,3 +320,44 @@ def test_run_preprocess_rejects_missing_clustering_config(tmp_path) -> None:
     )
     with pytest.raises(PreprocessError, match="Clustering config not found"):
         run_preprocess(config)
+
+
+def test_single_preprocess_records_gatk_version_only_when_gatk_runs(tmp_path, monkeypatch) -> None:
+    import json
+
+    def fake_run_command(command, timeout_seconds=3600):
+        del timeout_seconds
+        output_path = Path(command[command.index("-O") + 1])
+        _write_bgzipped_vcf(output_path, contig="chr1", variant_id=output_path.stem)
+
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("gatk_sv_profile.preprocess.get_gatk_version", lambda _: "The Genome Analysis Toolkit (GATK) v4.6.1.0\n")
+    monkeypatch.setattr("gatk_sv_profile.preprocess.run_command", fake_run_command)
+
+    reference_dict = tmp_path / "ref.dict"
+    reference_dict.write_text("@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\n")
+    segdup = tmp_path / "segdup.bed"
+    segdup.write_text("chr1\t0\t100\n")
+    _write_bgzipped_vcf(tmp_path / "a.vcf.gz", "chr1", "a_chr1")
+
+    def provenance_for(output_name: str, **extra) -> dict:
+        config = AnalysisConfig(
+            mode=AnalysisMode.SINGLE,
+            vcf_a_path=tmp_path / "a.vcf.gz",
+            output_dir=tmp_path / output_name,
+            reference_dict=reference_dict,
+            contigs=["chr1"],
+            contig_lengths={"chr1": 1000},
+            **extra,
+        )
+        run_preprocess(config)
+        return json.loads((tmp_path / output_name / "preprocess" / "provenance.json").read_text())
+
+    assert provenance_for("with_tracks", seg_dup_track=segdup)["gatk_version"] == "4.6.1.0"
+    assert provenance_for("no_tracks")["gatk_version"] is None

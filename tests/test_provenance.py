@@ -78,3 +78,9 @@ def test_write_summary_json_uses_fixed_keys(tmp_path) -> None:
     payload = json.loads(Path(path).read_text())
     assert payload["labels"]["clustering_config_recorded"] is False
     assert payload["tables"]["site_overlap/overlap_metrics"] == [{"svtype": "DEL", "n_total_a": 3.0, "n_total_b": None}]
+
+
+def test_provenance_that_is_not_an_object_is_ignored(tmp_path) -> None:
+    for content in ("null", "[]", "\"text\""):
+        (tmp_path / "provenance.json").write_text(content)
+        assert load_preprocess_provenance(tmp_path / "annotated_a.vcf.gz") is None

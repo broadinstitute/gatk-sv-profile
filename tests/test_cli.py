@@ -673,3 +673,24 @@ def test_cli_analyze_writes_summary_json(module_test_context, capsys) -> None:
     assert not any("CallsetA" in column for column in columns)
     algorithms = {row["algorithm"] for row in payload["tables"]["binned_counts/counts"]}
     assert "manta,wham" in algorithms
+
+
+def test_cli_analyze_single_mode_summary_uses_a_suffix(module_test_context, capsys) -> None:
+    import json
+
+    config = module_test_context.config
+    exit_code = main([
+        "analyze",
+        "--vcf", str(config.vcf_a_path),
+        "--output-dir", str(config.output_dir),
+        "--modules", "binned_counts",
+    ])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    payload = json.loads((config.output_dir / "summary.json").read_text())
+    columns = set().union(*(row.keys() for row in payload["tables"]["binned_counts/counts"]))
+    assert {"n_variants_a", "n_matched_a", "n_unmatched_a"}.issubset(columns)
+    assert "n_variants" not in columns
+    labeled = pd.read_csv(config.output_dir / "binned_counts" / "counts.tsv.gz", sep="\t")
+    assert "n_variants" in labeled.columns
