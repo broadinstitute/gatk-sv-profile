@@ -83,15 +83,17 @@ class GenotypeQualityModule(AnalysisModule):
         return True
 
     def run(self, data, config: AnalysisConfig) -> None:
-        del data
         output_dir = self.output_dir(config)
         tables_dir = output_dir / "tables"
         tables_dir.mkdir(parents=True, exist_ok=True)
-        for label, vcf_path in ((config.vcf_a_label, config.vcf_a_path), (config.vcf_b_label, config.vcf_b_path)):
+        for side, label, vcf_path in (("a", config.vcf_a_label, config.vcf_a_path), ("b", config.vcf_b_label, config.vcf_b_path)):
             if vcf_path is None:
                 continue
             summary = summarize_gq(vcf_path, pass_only=config.pass_only)
             write_tsv_gz(summary, tables_dir / f"gq_summary.{label}.tsv")
+            summary_tables = getattr(data, "summary_tables", None)
+            if summary_tables is not None:
+                summary_tables[f"{self.name}/gq_summary_{side}"] = summary
 
             rows = _iter_alt_gq_rows(vcf_path, config.pass_only)
             fig, ax = plt.subplots(figsize=single_column_figsize(2.8))

@@ -14,6 +14,7 @@ import pysam
 
 from .config import AnalysisConfig, AnalysisMode
 from .dimensions import STATUS_MATCHED, STATUS_UNMATCHED
+from .provenance import parse_gatk_version, write_preprocess_provenance
 from .vcf_format import resolve_record_svtype
 
 logger = logging.getLogger(__name__)
@@ -570,7 +571,10 @@ def _run_preprocess_single(config: AnalysisConfig) -> Path:
     logger.info("Split input: %s SV records and %s STR records", split_a.sv_count, split_a.str_count)
 
     annotated_sv_a = preprocess_dir / "annotated_a.sv.vcf.gz"
+    gatk_version = None
     if tracks and split_a.sv_count:
+        gatk_version = parse_gatk_version(get_gatk_version(config.gatk_path))
+        logger.info("Using GATK: %s", gatk_version)
         sv_shards = _scatter_vcf_by_contig(split_a.sv_vcf, config.contigs, preprocess_dir / "scatter_a.per_contig")
         annotated_shards = _scatter_region_overlap(
             vcfs=sorted(sv_shards),
@@ -590,6 +594,7 @@ def _run_preprocess_single(config: AnalysisConfig) -> Path:
 
     annotated_a = preprocess_dir / "annotated_a.vcf.gz"
     _merge_vcfs([annotated_sv_a, annotated_str_a], annotated_a, config.contigs)
+    write_preprocess_provenance(preprocess_dir, config=config, gatk_version=gatk_version, annotated_a=annotated_a, annotated_b=None)
 
     logger.info("Preprocess complete: annotated_a=%s", annotated_a)
     return annotated_a
@@ -609,6 +614,8 @@ def run_preprocess(config: AnalysisConfig) -> Tuple[Path, Optional[Path]]:
 
     if config.vcf_b_path is None:
         raise PreprocessError("vcf_b_path is required for PAIRED mode preprocessing.")
+    if config.clustering_config is not None and not config.clustering_config.is_file():
+        raise PreprocessError(f"Clustering config not found: {config.clustering_config}")
 
     preprocess_dir = config.output_dir / "preprocess"
     preprocess_dir.mkdir(parents=True, exist_ok=True)
@@ -624,6 +631,10 @@ def run_preprocess(config: AnalysisConfig) -> Tuple[Path, Optional[Path]]:
 
     version = get_gatk_version(config.gatk_path)
     logger.info("Using GATK: %s", version)
+    if config.clustering_config is not None:
+        logger.info("Using SVConcordance clustering config: %s", config.clustering_config)
+    else:
+        logger.info("No clustering config given; SVConcordance will use GATK's built-in defaults")
 
     tracks = get_tracks(config)
     if tracks:
@@ -731,6 +742,13 @@ def run_preprocess(config: AnalysisConfig) -> Tuple[Path, Optional[Path]]:
     )
     _merge_vcfs([annotated_sv_a, annotated_str_a], annotated_a, config.contigs)
     _merge_vcfs([annotated_sv_b, annotated_str_b], annotated_b, config.contigs)
+    write_preprocess_provenance(
+        preprocess_dir,
+        config=config,
+        gatk_version=parse_gatk_version(version),
+        annotated_a=annotated_a,
+        annotated_b=annotated_b,
+    )
 
     logger.info("Preprocess complete: annotated_a=%s annotated_b=%s", annotated_a, annotated_b)
     return annotated_a, annotated_b

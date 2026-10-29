@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from itertools import combinations
 from dataclasses import dataclass
-from typing import FrozenSet, Iterable, Mapping, Optional, Sequence, Set, Union
+from typing import FrozenSet, Iterable, Iterator, Mapping, Optional, Sequence, Set, Union
 
 import pandas as pd
 
@@ -148,6 +150,28 @@ def algorithms_to_text(value: object) -> str:
     return ",".join(normalize_algorithms(value))
 
 
+def canonical_algorithm_combination(value: object) -> str:
+    """Return the caller set as one fixed string: deduplicated, lowercased, sorted, comma-joined."""
+    return ",".join(sorted({algorithm.lower() for algorithm in normalize_algorithms(value)}))
+
+
+_COMBINED_ALGORITHM_BUCKETS: ContextVar[bool] = ContextVar("combined_algorithm_buckets", default=False)
+
+
+def combined_algorithm_buckets_enabled() -> bool:
+    return _COMBINED_ALGORITHM_BUCKETS.get()
+
+
+@contextmanager
+def combined_algorithm_buckets(enabled: bool = True) -> Iterator[None]:
+    """Within this block, explode_algorithm_buckets keeps one row per site with the combined caller string."""
+    token = _COMBINED_ALGORITHM_BUCKETS.set(enabled)
+    try:
+        yield
+    finally:
+        _COMBINED_ALGORITHM_BUCKETS.reset(token)
+
+
 def normalize_evidence_bucket(value: object) -> str:
     if isinstance(value, (tuple, list, set, frozenset)):
         raw_values = [str(item).strip().upper() for item in value if item not in (None, ".")]
@@ -264,6 +288,9 @@ def explode_algorithm_buckets(
         return expanded
     if algorithms_column not in expanded.columns:
         expanded[bucket_column] = ALGORITHM_UNKNOWN
+        return expanded
+    if combined_algorithm_buckets_enabled():
+        expanded[bucket_column] = expanded[algorithms_column].map(canonical_algorithm_combination)
         return expanded
     expanded[bucket_column] = expanded[algorithms_column].map(normalize_algorithms)
     expanded = expanded.explode(bucket_column, ignore_index=True)

@@ -121,6 +121,11 @@ Useful options:
 - `--num-workers 4` to control contig-level parallelism
 - `--seg-dup-track`, `--simple-repeat-track`, `--repeatmasker-track` for extra interval annotations
 - `--gatk-path` and `--java-options` to control the GATK invocation
+- `--clustering-config` to pass an SVConcordance clustering config (e.g. gatk-sv's production
+  config). Without it, SVConcordance matches sites with GATK's built-in defaults.
+
+Preprocess also writes `preprocess/provenance.json` (GATK version, clustering config path and
+SHA-256). `analyze` reads it when given the annotated VCFs from that directory.
 
 This command prints the resolved annotated VCF path(s):
 
@@ -157,7 +162,8 @@ Common options:
 - `--pass-only`
 - `--context-overlap 0.5`
 - `--per-chrom`
-- `--enable-site-match-table`
+- `--enable-site-match-table` (per-site match tables, see below)
+- `--dedup-algorithms` (count each site once, see below)
 - `--per-sample-counts-table`
 - `--ped cohort.ped`
 - `--num-workers 4`
@@ -244,6 +250,35 @@ Examples:
 - `allele_freq/tables/af_correlation_stats.tsv.gz`
 - `genotype_quality/tables/gq_summary.<label>.tsv.gz`
 - `family_analysis/tables/inheritance_stats.trios.tsv.gz`
+
+### `summary.json`
+
+`analyze` writes `summary.json` at the root of `--output-dir`. Its column names are the same in
+every run: `_a`/`_b` suffixes, never run labels. The labeled `.tsv.gz`/`.parquet` tables are
+unchanged.
+
+- `labels`: `schema_version`, `mode`, `label_a`, `label_b`, `clustering_config`
+  (`{"path", "sha256"}`, or `null` when GATK's defaults were used), `clustering_config_recorded`
+  (`false` when no preprocess provenance was found, so the config is unknown), `gatk_version`,
+  `algorithm_dedup`, `pass_only`, `context_overlap`.
+- `modules_ran`, `modules_skipped`.
+- `tables`: keyed `<module>/<table>`, one record per row.
+
+### Algorithm buckets
+
+By default a site called by several algorithms is counted once per algorithm in every
+`algorithm` breakdown. With `--dedup-algorithms` each site is counted once, in a bucket named by
+its combined caller string: deduplicated, lowercased, sorted, comma-joined (`depth,manta`).
+Counts made in the two modes cannot be compared; `summary.json` records which was used.
+
+### Site match tables
+
+With `--enable-site-match-table`, `site_overlap/tables/` also contains
+`site_match.a_to_b.tsv.gz` (one row per site in A) and `site_match.b_to_a.tsv.gz` (one row per
+site in B). Both have the columns `chrom pos end svtype svlen size_bucket vid_a vid_b status_a
+status_b filter_a filter_b algorithms_a algorithms_b`. Position columns describe the row's own
+site. Each row follows that site's own `TRUTH_VID`, and the partner columns are empty when the
+site has no match. These tables ignore `--pass-only`; filter on `filter_a`/`filter_b` instead.
 
 ## Development
 

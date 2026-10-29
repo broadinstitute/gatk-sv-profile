@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -60,6 +60,8 @@ class AggregatedData:
     sample_indices_b: Optional[np.ndarray]
     label_a: str
     label_b: Optional[str]
+    # Tables for summary.json, keyed "<module>/<table>", with fixed _a/_b column suffixes.
+    summary_tables: Dict[str, pd.DataFrame] = field(default_factory=dict)
 
     @property
     def is_paired(self) -> bool:

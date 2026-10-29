@@ -612,3 +612,85 @@ def test_cli_run_executes_preprocess_then_analyze(tmp_path, monkeypatch, capsys)
     assert captured["analyze_config"].contig_lengths == {"chr1": 1000, "chr2": 2000}
     assert captured["analyze_config"].context_overlap == pytest.approx(0.25)
 
+
+
+def test_cli_run_passes_clustering_config_and_dedup_flag(tmp_path, monkeypatch) -> None:
+    captured = {}
+
+    def fake_run_preprocess(config: AnalysisConfig):
+        captured["preprocess"] = config
+        return tmp_path / "annotated_a.vcf.gz", tmp_path / "annotated_b.vcf.gz"
+
+    def fake_run_analysis(config: AnalysisConfig) -> int:
+        captured["analyze"] = config
+        return 0
+
+    contig_list = tmp_path / "contigs.list"
+    contig_list.write_text("chr1\n")
+    reference_dict = tmp_path / "ref.dict"
+    reference_dict.write_text("@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\n")
+    monkeypatch.setattr("gatk_sv_profile.cli.run_preprocess", fake_run_preprocess)
+    monkeypatch.setattr("gatk_sv_profile.cli._run_analysis", fake_run_analysis)
+
+    exit_code = main([
+        "run",
+        "--vcf-a", str(tmp_path / "a.vcf.gz"),
+        "--vcf-b", str(tmp_path / "b.vcf.gz"),
+        "--reference-dict", str(reference_dict),
+        "--contig-list", str(contig_list),
+        "--output-dir", str(tmp_path / "out"),
+        "--clustering-config", str(tmp_path / "clustering.tsv"),
+        "--dedup-algorithms",
+    ])
+
+    assert exit_code == 0
+    assert captured["preprocess"].clustering_config == tmp_path / "clustering.tsv"
+    assert captured["analyze"].dedup_algorithms is True
+
+
+def test_cli_analyze_writes_summary_json(module_test_context, capsys) -> None:
+    import json
+
+    config = module_test_context.config
+    exit_code = main([
+        "analyze",
+        "--vcf-a", str(config.vcf_a_path),
+        "--vcf-b", str(config.vcf_b_path),
+        "--label-a", "CallsetA",
+        "--label-b", "CallsetB",
+        "--output-dir", str(config.output_dir),
+        "--modules", "site_overlap,binned_counts",
+        "--dedup-algorithms",
+    ])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    payload = json.loads((config.output_dir / "summary.json").read_text())
+    assert payload["labels"]["label_a"] == "CallsetA"
+    assert payload["labels"]["algorithm_dedup"] is True
+    columns = set().union(*(row.keys() for row in payload["tables"]["binned_counts/counts"]))
+    assert {"n_variants_a", "n_variants_b"}.issubset(columns)
+    assert not any("CallsetA" in column for column in columns)
+    algorithms = {row["algorithm"] for row in payload["tables"]["binned_counts/counts"]}
+    assert "manta,wham" in algorithms
+
+
+def test_cli_analyze_single_mode_summary_uses_a_suffix(module_test_context, capsys) -> None:
+    import json
+
+    config = module_test_context.config
+    exit_code = main([
+        "analyze",
+        "--vcf", str(config.vcf_a_path),
+        "--output-dir", str(config.output_dir),
+        "--modules", "binned_counts",
+    ])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    payload = json.loads((config.output_dir / "summary.json").read_text())
+    columns = set().union(*(row.keys() for row in payload["tables"]["binned_counts/counts"]))
+    assert {"n_variants_a", "n_matched_a", "n_unmatched_a"}.issubset(columns)
+    assert "n_variants" not in columns
+    labeled = pd.read_csv(config.output_dir / "binned_counts" / "counts.tsv.gz", sep="\t")
+    assert "n_variants" in labeled.columns
