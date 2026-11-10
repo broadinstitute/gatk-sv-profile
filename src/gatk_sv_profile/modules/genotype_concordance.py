@@ -45,7 +45,7 @@ def _extract_concordance_rows(vcf_path: Path, sites: pd.DataFrame, label: str, s
     for row in sites[["variant_id", "contig"]].drop_duplicates().itertuples(index=False):
         target_ids_by_contig[str(row.contig)].add(str(row.variant_id))
 
-    site_meta = sites.set_index("variant_id")[["svtype", "size_bucket", "af_bucket", "genomic_context", "algorithms", "evidence_bucket"]]
+    site_meta = sites.drop_duplicates("variant_id").set_index("variant_id")[["svtype", "size_bucket", "af_bucket", "genomic_context", "algorithms", "evidence_bucket"]]
     rows = []
     with pysam.VariantFile(str(vcf_path)) as vcf:
         for contig, target_ids in target_ids_by_contig.items():
@@ -255,6 +255,10 @@ class GenotypeConcordanceModule(AnalysisModule):
         metrics_a = _extract_concordance_rows(config.vcf_a_path, data.sites_a, data.label_a, "a")
         metrics_b = _extract_concordance_rows(config.vcf_b_path, data.sites_b, data.label_b, "b")
         metrics = pd.concat([metrics_a, metrics_b], ignore_index=True) if not metrics_a.empty or not metrics_b.empty else pd.DataFrame()
+        # `metrics` (one row per site/source) is the single dataframe behind every heatmap
+        # below (4 metrics x 5 grouping fields = 20 plots), so it is serialized once here
+        # rather than once per plot.
+        write_tsv_gz(metrics.replace({"source": {"a": data.label_a, "b": data.label_b}}), tables_dir / "concordance_metrics.per_site.tsv", skip_gzip=True)
         fixed_summary = summarize_concordance_metrics(metrics)
         data.summary_tables[f"{self.name}/concordance_metrics"] = fixed_summary
         summary = relabel_vcf_columns(fixed_summary, data.label_a, data.label_b)
