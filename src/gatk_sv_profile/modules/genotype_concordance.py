@@ -259,7 +259,9 @@ class GenotypeConcordanceModule(AnalysisModule):
         # below (4 metrics x 5 grouping fields = 20 plots), so it is serialized once here
         # rather than once per plot.
         write_tsv_gz(metrics.replace({"source": {"a": data.label_a, "b": data.label_b}}), tables_dir / "concordance_metrics.per_site.tsv", skip_gzip=True)
-        summary = relabel_vcf_columns(summarize_concordance_metrics(metrics), data.label_a, data.label_b)
+        fixed_summary = summarize_concordance_metrics(metrics)
+        data.summary_tables[f"{self.name}/concordance_metrics"] = fixed_summary
+        summary = relabel_vcf_columns(fixed_summary, data.label_a, data.label_b)
         write_tsv_gz(summary, tables_dir / "concordance_metrics.tsv")
         for metric in ["genotype_concordance", "non_ref_genotype_concordance", "var_ppv", "var_sensitivity"]:
             stem = _metric_stem(metric)
